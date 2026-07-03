@@ -4,6 +4,21 @@
 
 它会把一个本地文件夹变成共读工作区：浏览器阅读页、实时聊天桥、划线日志、阅读画像文件和卡片模板都在本机运行。适合想和 AI 一起读书，但不想把私人书籍、阅读记录、对话历史上传到云端的人。
 
+## 快速开始
+
+把这段话发给你的 agent：
+
+```text
+请安装并使用这个 reading-companion skill：
+https://github.com/Tanangyuanan/reading-companion
+
+把它加载为名叫 reading-companion 的 skill，在 skill 包外创建 reading workspace，
+询问我要读的书名或本地文件路径，运行 python3 <reading-workspace>/启动共读.py，
+然后把本地共读页面链接给我。后续共读时，请使用 workspace 里的 profile 文件记住我的阅读习惯。
+```
+
+如果你的 agent 不能自动安装 skill，就先 clone 这个仓库，把 `reading-companion` 文件夹放到你的 agent runtime 会加载 skills 的目录里，然后再发送上面这段话。
+
 ![reading-companion 共读界面](assets/screenshots/co-reading-ui.jpg)
 
 这个界面围绕“正在读书的现场”组织：左侧是目录和阅读计划，中间是书页，右侧是共读对话。你划中一句话，可以把它标成案例、金句、疑问、共鸣、反对、行动或洞察；这些互动会继续沉淀成卡片和个性化阅读记忆。
@@ -31,7 +46,7 @@
 
 这套记忆的边界很窄：它只应该帮助 agent 理解你的阅读习惯、解释偏好、卡片风格和反复卡住的地方。它不应该推断你的私人身份、生活背景或敏感特征，除非你明确提供。当前会话里的要求永远高于旧画像。
 
-## 作为 Skill 使用
+## 手动安装为 Skill
 
 先把这个文件夹作为 agent skill 安装到你的 agent CLI 会加载 skills 的位置。文件夹名保留为 `reading-companion`，如果你的运行时需要，安装后重启或重新加载 agent。
 

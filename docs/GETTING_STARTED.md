@@ -3,6 +3,20 @@
 This guide shows two paths: use `reading-companion` as an agent skill, or run a
 manual smoke test to verify the local co-reading frontend.
 
+## Quick Start Prompt
+
+Paste this into your agent:
+
+```text
+Please install and use the reading-companion skill from
+https://github.com/Tanangyuanan/reading-companion.
+
+Load it as a skill named reading-companion, create a reading workspace outside
+the skill package, ask me for the book title or local file path, run
+python3 <reading-workspace>/启动共读.py, then give me the local co-reading URL.
+Use the workspace profile files to remember my reading habits across sessions.
+```
+
 ## Requirements
 
 - Python 3.9+

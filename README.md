@@ -7,6 +7,24 @@ browser reader, a realtime chat bridge, highlight logs, reading profile files,
 and card templates. It is designed for people who want to read with an AI
 companion without uploading private books or reading history to a hosted app.
 
+## Quick Start
+
+Paste this into your agent:
+
+```text
+Please install and use the reading-companion skill from
+https://github.com/Tanangyuanan/reading-companion.
+
+Load it as a skill named reading-companion, create a reading workspace outside
+the skill package, ask me for the book title or local file path, run
+python3 <reading-workspace>/启动共读.py, then give me the local co-reading URL.
+Use the workspace profile files to remember my reading habits across sessions.
+```
+
+If your agent cannot install skills automatically, clone this repository and put
+the `reading-companion` folder in the directory where your agent runtime loads
+skills, then send the same prompt again.
+
 ![reading-companion co-reading interface](assets/screenshots/co-reading-ui.jpg)
 
 The interface is organized around the reading moment: the left side keeps the
@@ -58,7 +76,7 @@ This repository does **not** include real user reading data, private book files,
 conversation logs, profile files, harness state, API keys, or personal absolute
 paths. Runtime data belongs in the reading workspace you create.
 
-## Use It As A Skill
+## Use It As A Skill Manually
 
 Install this folder as an agent skill in the place your agent CLI loads skills
 from. Keep the folder name `reading-companion`, then restart or reload the
