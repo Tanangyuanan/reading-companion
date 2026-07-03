@@ -39,6 +39,12 @@ frontend-config.json
 Those files are user state and runtime files. Do not commit a real workspace
 back into this repository.
 
+The three profile files form the local personalization memory. As you read, the
+agent can append evidence to `profile-signals.jsonl`, keep uncertain observations
+in `profile-candidates.md`, and promote repeated or explicit preferences into
+`profile.md`. Future sessions may use that profile to adapt explanations,
+questions, and card suggestions to your reading habits.
+
 ## 2. Start The Reader
 
 ```bash

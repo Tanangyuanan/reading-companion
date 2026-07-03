@@ -7,6 +7,13 @@ browser reader, a realtime chat bridge, highlight logs, reading profile files,
 and card templates. It is designed for people who want to read with an AI
 companion without uploading private books or reading history to a hosted app.
 
+The companion is meant to get more useful over time. Each workspace contains a
+small, local personalization memory: it records evidence-backed reading
+preferences, recurring questions, useful card styles, and corrections from real
+sessions. On later sessions, the agent can load that profile as default context
+so it better understands how you read, while still letting your current request
+override past habits.
+
 The project is packaged as an agent skill, but the runtime is ordinary local
 files plus Python scripts. It can be adapted to Codex, Claude Code, Gemini CLI,
 or another agent CLI through a thin adapter.
@@ -16,9 +23,25 @@ or another agent CLI through a thin adapter.
 - Opens a local co-reading page at `http://127.0.0.1:8768/共读.html`
 - Supports local EPUB/PDF/HTML/Markdown/text sources or excerpt-only reading
 - Captures highlights, reactions, conversations, and card candidates
+- Builds a local reading profile from interaction signals, not from generic summaries
 - Keeps reading state in a user-owned workspace, not in the skill package
 - Auto-detects a local model CLI on `PATH` (`claude`, `codex`, `gemini`) when available
 - Works in reader-only mode when no model CLI is installed
+
+## Personalized Reading Memory
+
+The memory system lives in the reading workspace you create, not in this
+repository and not in a hosted account.
+
+- `profile.md` stores active reading preferences the agent may use at session start
+- `profile-signals.jsonl` stores evidence from highlights, reactions, card choices, and corrections
+- `profile-candidates.md` keeps uncertain observations out of the active profile
+
+This memory is deliberately narrow: it should help the agent understand your
+reading habits, preferred explanations, card style, and repeated confusion
+points. It should not infer private identity, life context, or sensitive traits
+unless you explicitly provide them. The current session always has priority over
+old profile entries.
 
 ## What It Does Not Include
 

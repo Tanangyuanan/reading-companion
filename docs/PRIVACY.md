@@ -38,6 +38,11 @@ Generated reading workspaces may contain sensitive data:
 - reading profile signals
 - card drafts
 
+The reading profile is a local personalization memory. It may reveal how a user
+reads, what kinds of explanations help them, which topics repeatedly confuse
+them, and what card formats they prefer. Keep it with the user's workspace and
+do not publish real profile files.
+
 Keep workspaces outside this repository. If you need to share a workspace for a
 bug report, create a synthetic one with fake text.
 
