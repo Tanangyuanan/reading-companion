@@ -1,233 +1,146 @@
 # reading-companion
 
-Local-first co-reading companion for agent CLIs.
+一个本地优先的 AI 共读搭子 skill。
 
-`reading-companion` turns a local folder into a small co-reading workspace: a
-browser reader, a realtime chat bridge, highlight logs, reading profile files,
-and card templates. It is designed for people who want to read with an AI
-companion without uploading private books or reading history to a hosted app.
+它会把一个本地文件夹变成共读工作区：浏览器阅读页、实时聊天桥、划线日志、阅读画像文件和卡片模板都在本机运行。适合想和 AI 一起读书，但不想把私人书籍、阅读记录、对话历史上传到云端的人。
 
-## Quick Start
+## 快速开始
 
-Paste this into your agent:
+把这段话发给你的 agent：
 
 ```text
-Please install and use the reading-companion skill from
-https://github.com/Tanangyuanan/reading-companion.
+请安装并使用这个 reading-companion skill：
+https://github.com/Tanangyuanan/reading-companion
 
-Load it as a skill named reading-companion, create a reading workspace outside
-the skill package, ask me for the book title or local file path, run
-python3 <reading-workspace>/启动共读.py, then give me the local co-reading URL.
-Use the workspace profile files to remember my reading habits across sessions.
+把它加载为名叫 reading-companion 的 skill，在 skill 包外创建 reading workspace，
+询问我要读的书名或本地文件路径，运行 python3 <reading-workspace>/启动共读.py，
+然后把本地共读页面链接给我。后续共读时，请使用 workspace 里的 profile 文件记住我的阅读习惯。
 ```
 
-If your agent cannot install skills automatically, clone this repository and put
-the `reading-companion` folder in the directory where your agent runtime loads
-skills, then send the same prompt again.
+如果你的 agent 不能自动安装 skill，就先 clone 这个仓库，把 `reading-companion` 文件夹放到你的 agent runtime 会加载 skills 的目录里，然后再发送上面这段话。
 
-## Project Overview
+## 项目介绍
 
-`reading-companion` is an open-source agent skill for building a local co-reading
-companion. Instead of sending a book into a hosted reading app, it gives your
-agent a reusable workflow: prepare a reading workspace, launch a browser-based
-reader, connect a local model CLI when available, capture highlights and
-conversation, and maintain a lightweight reading profile over time.
+`reading-companion` 是一个开源的 agent skill，用来把你的 agent 变成本地共读搭子。它不是把书上传到某个云端阅读产品，而是给 agent 一套可复用的工作流：准备 reading workspace、启动浏览器阅读器、在本机可用时接入模型 CLI、记录划线和对话，并长期维护一份轻量的阅读画像。
 
-The project has three parts:
+这个项目由三层组成：
 
-- **Skill instructions**: `SKILL.md` and `references/` tell an agent how to run a
-  co-reading session, when to ask the user for a book, how to use profile memory,
-  and how to avoid saving private state in the skill package.
-- **Local reading runtime**: `assets/coread/`, `assets/frontend/`, and
-  `scripts/init_reading_workspace.py` create the actual local reader, realtime
-  bridge, dashboard, logs, cards, and profile files.
-- **User-owned workspace**: every book, highlight, conversation log, card draft,
-  and profile signal lives in a separate reading workspace created on the user's
-  machine.
+- **Skill 指令层**：`SKILL.md` 和 `references/` 告诉 agent 怎么启动共读、什么时候询问书名或文件路径、如何使用阅读记忆，以及如何避免把用户私有状态写进 skill 包。
+- **本地阅读运行时**：`assets/coread/`、`assets/frontend/` 和 `scripts/init_reading_workspace.py` 负责创建本地阅读器、实时桥、dashboard、日志、卡片和 profile 文件。
+- **用户自己的 workspace**：真实书籍、划线、对话记录、卡片草稿和阅读画像信号，都保存在用户机器上的独立 reading workspace 里。
 
-The result is a reading companion that can become more personal without becoming
-a cloud service. It learns from interaction signals such as highlights,
-questions, corrections, and card choices, then uses that local profile as context
-for future sessions.
+所以它的目标不是做一次性的 AI 总结，而是做一个会随着共读互动变得更懂你的本地阅读搭子。它会从划线、提问、纠正、卡片选择里积累信号，下次继续读时，把这些本地 profile 当作上下文使用。
 
-![reading-companion co-reading interface](assets/screenshots/co-reading-ui.jpg)
+![reading-companion 共读界面](assets/screenshots/co-reading-ui.jpg)
 
-The interface is organized around the reading moment: the left side keeps the
-table of contents and reading plan, the center stays focused on the book, and
-the right side holds the companion conversation. Highlight a passage and turn it
-into a case, quote, question, resonance, disagreement, action, or observation;
-those interactions become the raw material for cards and personalization memory.
+这个界面围绕“正在读书的现场”组织：左侧是目录和阅读计划，中间是书页，右侧是共读对话。你划中一句话，可以把它标成案例、金句、疑问、共鸣、反对、行动或洞察；这些互动会继续沉淀成卡片和个性化阅读记忆。
 
-The companion is meant to get more useful over time. Each workspace contains a
-small, local personalization memory: it records evidence-backed reading
-preferences, recurring questions, useful card styles, and corrections from real
-sessions. On later sessions, the agent can load that profile as default context
-so it better understands how you read, while still letting your current request
-override past habits.
+它不只是一次性的阅读页面，也包含一套本地个性化记忆。每个 reading workspace 都会保存有证据的阅读偏好、反复出现的问题、你更喜欢的卡片方式，以及你对 agent 判断的纠正。下一次读书时，agent 可以把这些画像作为默认上下文，更懂你的阅读习惯；但你当下说的阅读目标永远优先于旧记录。
 
-The project is packaged as an agent skill, but the runtime is ordinary local
-files plus Python scripts. It can be adapted to Codex, Claude Code, Gemini CLI,
-or another agent CLI through a thin adapter.
+## 能做什么
 
-## What It Does
+- 创建本地 reading workspace，并通过 Python 启动共读桥
+- 启动器运行后，在本机浏览器里打开共读页面
+- 支持本地 EPUB/PDF/HTML/Markdown/文本，也支持没有原文的摘录式共读
+- 记录划线、碎念、对话、卡片候选
+- 从真实互动里形成本地阅读画像，而不是只做通用摘要
+- 把用户数据写到独立 reading workspace，不写进 skill 包
+- 自动探测本机 `PATH` 上的 `claude` / `codex` / `gemini`
+- 没有模型 CLI 时，也能作为阅读器和划线工具使用
 
-- Creates a local reading workspace, then starts a Python co-reading bridge
-- Serves the browser page locally after the launcher is running
-- Supports local EPUB/PDF/HTML/Markdown/text sources or excerpt-only reading
-- Captures highlights, reactions, conversations, and card candidates
-- Builds a local reading profile from interaction signals, not from generic summaries
-- Keeps reading state in a user-owned workspace, not in the skill package
-- Auto-detects a local model CLI on `PATH` (`claude`, `codex`, `gemini`) when available
-- Works in reader-only mode when no model CLI is installed
+## 个性化阅读记忆
 
-## Personalized Reading Memory
+记忆系统存在于你创建的 reading workspace 里，不存在于这个仓库，也不依赖云端账号。
 
-The memory system lives in the reading workspace you create, not in this
-repository and not in a hosted account.
+- `profile.md` 保存已确认、可在下次会话默认使用的阅读偏好
+- `profile-signals.jsonl` 保存划线、反应、卡片选择、纠正等互动证据
+- `profile-candidates.md` 保存还不够确定的候选观察，避免过早写入画像
 
-- `profile.md` stores active reading preferences the agent may use at session start
-- `profile-signals.jsonl` stores evidence from highlights, reactions, card choices, and corrections
-- `profile-candidates.md` keeps uncertain observations out of the active profile
+这套记忆的边界很窄：它只应该帮助 agent 理解你的阅读习惯、解释偏好、卡片风格和反复卡住的地方。它不应该推断你的私人身份、生活背景或敏感特征，除非你明确提供。当前会话里的要求永远高于旧画像。
 
-This memory is deliberately narrow: it should help the agent understand your
-reading habits, preferred explanations, card style, and repeated confusion
-points. It should not infer private identity, life context, or sensitive traits
-unless you explicitly provide them. The current session always has priority over
-old profile entries.
+## 手动安装为 Skill
 
-## What It Does Not Include
+先把这个文件夹作为 agent skill 安装到你的 agent CLI 会加载 skills 的位置。文件夹名保留为 `reading-companion`，如果你的运行时需要，安装后重启或重新加载 agent。
 
-This repository does **not** include real user reading data, private book files,
-conversation logs, profile files, harness state, API keys, or personal absolute
-paths. Runtime data belongs in the reading workspace you create.
-
-## Use It As A Skill Manually
-
-Install this folder as an agent skill in the place your agent CLI loads skills
-from. Keep the folder name `reading-companion`, then restart or reload the
-agent if your runtime requires it.
-
-Then ask your agent to start a reading session, for example:
+然后直接对 agent 说你要开始共读，例如：
 
 ```text
-Use reading-companion to read The Manager's Path with me.
+用 reading-companion 陪我读《经理人的第一课》。
 ```
 
-or:
+或者：
 
 ```text
-Start a co-reading workspace for this local EPUB and help me turn highlights
-into cards.
+为这个本地 EPUB 开一个共读 workspace，帮我把划线变成卡片。
 ```
 
-The agent should use this skill to:
+agent 应该根据这个 skill 完成这些事：
 
-- choose or create a reading workspace outside the skill package
-- resolve the book or start in excerpt-only mode
-- run the workspace launcher: `python3 <reading-workspace>/启动共读.py`
-- give you the local URL after the launcher is running
-- read `profile.md`, `profile-signals.jsonl`, and recent session state before the next session
+- 在 skill 包外选择或创建 reading workspace
+- 找到书籍文件，或者在没有原文时进入摘录式共读
+- 运行 workspace 里的启动器：`python3 <reading-workspace>/启动共读.py`
+- 启动成功后，把本地共读页面 URL 给你
+- 下次继续读时，先读取 `profile.md`、`profile-signals.jsonl` 和最近会话状态
 
-## Manual Smoke Test
+## 手动试跑
 
-If you want to try the runtime without installing it into an agent first, create
-a disposable reading workspace:
+如果你只是想先验证这个包能跑，不想先装进 agent，可以创建一个临时共读工作区：
 
 ```bash
 python3 scripts/init_reading_workspace.py /tmp/reading-companion-demo --book "Demo Book" --source-mode user-input-driven
 ```
 
-Start the local Python launcher:
+启动本地 Python 服务：
 
 ```bash
 python3 /tmp/reading-companion-demo/启动共读.py
 ```
 
-Then open the local page served by that launcher:
+然后打开启动器提供的本地页面：
 
 ```text
 http://127.0.0.1:8768/共读.html
 ```
 
-The URL works only while `启动共读.py` is running. The launcher starts the local
-HTTP page and realtime bridge, writes the selected ports to `启动信息.md`, and
-keeps runtime state inside the reading workspace.
+这个 URL 只有在 `启动共读.py` 正在运行时才可用。启动器会启动本地 HTTP 页面和实时桥，并把最终端口写到 workspace 里的 `启动信息.md`。
 
-If `claude`, `codex`, or `gemini` is available on your `PATH`, the launcher will
-auto-enable live model replies. If none is found, the page still works for
-reading, highlighting, and saving local logs.
+如果本机能找到 `claude`、`codex` 或 `gemini`，启动器会自动接入模型回复；如果找不到，页面仍然可以阅读、划线和保存日志。
 
-Force a specific model CLI:
+指定模型 CLI：
 
 ```bash
 COREAD_MODEL_ENABLED=1 COREAD_MODEL_CLI=codex python3 /tmp/reading-companion-demo/启动共读.py
 ```
 
-Disable model replies:
+关闭模型回复，只用阅读器：
 
 ```bash
 COREAD_MODEL_ENABLED=0 python3 /tmp/reading-companion-demo/启动共读.py
 ```
 
-## Repository Layout
+## 数据边界
 
-```text
-reading-companion/
-├── SKILL.md
-├── README.md
-├── README.zh-CN.md
-├── RELEASE_CHECKLIST.md
-├── agents/
-├── assets/
-│   ├── coread/
-│   ├── frontend/
-│   ├── screenshots/
-│   └── *-template.md
-├── docs/
-├── references/
-└── scripts/
-```
+这个仓库不应该包含真实用户数据。真实书籍、profile、共读日志、对话记录都应该在你创建的 reading workspace 里。
 
-Important files:
-
-- `SKILL.md` - skill entrypoint and operating contract
-- `assets/frontend/` - browser reading pages
-- `assets/coread/` - local Python bridge and launcher
-- `assets/screenshots/` - README product screenshots
-- `scripts/init_reading_workspace.py` - creates a new reading workspace
-- `references/` - workflow, schemas, prompts, and compatibility notes
-- `docs/` - user-facing setup, config, privacy, and development docs
-
-## Documentation
-
-- [Getting Started](docs/GETTING_STARTED.md)
-- [Configuration](docs/CONFIGURATION.md)
-- [Privacy and Data Boundary](docs/PRIVACY.md)
-- [Development](docs/DEVELOPMENT.md)
-- [Release Checklist](RELEASE_CHECKLIST.md)
-- [中文说明](README.zh-CN.md)
-
-## Local Data Boundary
-
-Generated workspaces may contain book files, reading logs, profile signals, and
-conversation history. Keep them outside this repository. The included
-`.gitignore` blocks common generated files, but you should still run the release
-checks before publishing.
+发布前请检查：
 
 ```bash
 find . -type d \( -name tmp -o -name .harness -o -name .venv -o -name venv -o -name __pycache__ \) -print
-rg -n "<personal-name>|<private-assistant-name>|<absolute-home-path>|<credential-var>|<secret-prefix>" . --glob '!references/cli-compatibility.md'
+rg -n "<个人姓名>|<私人助手名>|<本机绝对路径>|<凭证变量>|<密钥前缀>" . --glob '!references/cli-compatibility.md'
 ```
 
-Both commands should return no publish-blocking results.
+## 文档
 
-## Status
+- [快速上手](docs/GETTING_STARTED.md)
+- [配置说明](docs/CONFIGURATION.md)
+- [隐私和数据边界](docs/PRIVACY.md)
+- [开发说明](docs/DEVELOPMENT.md)
+- [发布检查清单](RELEASE_CHECKLIST.md)
 
-Early open-source package. The core workflow runs locally and has been smoke
-tested, but the project still needs real-world feedback across different agent
-CLIs and operating systems.
+## 当前状态
+
+这是早期开源包。核心流程已经可以本地启动，但还需要更多不同系统、不同 agent CLI 的真实试用反馈。
 
 ## License
 
-No public license has been selected yet. Choose and add a license before a
-public GitHub release.
+当前还没有选择公开 license。正式公开 GitHub 仓库前，需要先补 license。
