@@ -143,4 +143,4 @@ rg -n "<个人姓名>|<私人助手名>|<本机绝对路径>|<凭证变量>|<密
 
 ## License
 
-当前还没有选择公开 license。正式公开 GitHub 仓库前，需要先补 license。
+本项目使用 [MIT License](LICENSE) 开源。
