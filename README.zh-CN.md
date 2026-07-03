@@ -31,9 +31,33 @@
 
 这套记忆的边界很窄：它只应该帮助 agent 理解你的阅读习惯、解释偏好、卡片风格和反复卡住的地方。它不应该推断你的私人身份、生活背景或敏感特征，除非你明确提供。当前会话里的要求永远高于旧画像。
 
-## 快速开始
+## 作为 Skill 使用
 
-创建一个空的共读工作区：
+先把这个文件夹作为 agent skill 安装到你的 agent CLI 会加载 skills 的位置。文件夹名保留为 `reading-companion`，如果你的运行时需要，安装后重启或重新加载 agent。
+
+然后直接对 agent 说你要开始共读，例如：
+
+```text
+用 reading-companion 陪我读《经理人的第一课》。
+```
+
+或者：
+
+```text
+为这个本地 EPUB 开一个共读 workspace，帮我把划线变成卡片。
+```
+
+agent 应该根据这个 skill 完成这些事：
+
+- 在 skill 包外选择或创建 reading workspace
+- 找到书籍文件，或者在没有原文时进入摘录式共读
+- 运行 workspace 里的启动器：`python3 <reading-workspace>/启动共读.py`
+- 启动成功后，把本地共读页面 URL 给你
+- 下次继续读时，先读取 `profile.md`、`profile-signals.jsonl` 和最近会话状态
+
+## 手动试跑
+
+如果你只是想先验证这个包能跑，不想先装进 agent，可以创建一个临时共读工作区：
 
 ```bash
 python3 scripts/init_reading_workspace.py /tmp/reading-companion-demo --book "Demo Book" --source-mode user-input-driven

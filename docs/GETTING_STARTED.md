@@ -1,7 +1,7 @@
 # Getting Started
 
-This guide creates a disposable reading workspace and starts the local co-reading
-page.
+This guide shows two paths: use `reading-companion` as an agent skill, or run a
+manual smoke test to verify the local co-reading frontend.
 
 ## Requirements
 
@@ -11,9 +11,20 @@ page.
 
 No npm install, bundler, database, hosted account, or cloud backend is required.
 
-## 1. Create A Workspace
+## 1. Use The Skill
 
-From the repository root:
+Install this repository folder where your agent runtime loads skills, keeping
+the folder name `reading-companion`. After restarting or reloading the agent,
+ask it to start or continue a book with `reading-companion`.
+
+The agent should create or locate a reading workspace, resolve the book, run the
+workspace launcher, and then hand you the local URL after the page is actually
+being served.
+
+## 2. Manual Smoke Test
+
+Create a disposable workspace from the repository root:
+
 
 ```bash
 python3 scripts/init_reading_workspace.py /tmp/reading-companion-demo --book "Demo Book" --source-mode user-input-driven
@@ -45,7 +56,7 @@ in `profile-candidates.md`, and promote repeated or explicit preferences into
 `profile.md`. Future sessions may use that profile to adapt explanations,
 questions, and card suggestions to your reading habits.
 
-## 2. Start The Reader
+### Start The Reader
 
 ```bash
 python3 /tmp/reading-companion-demo/启动共读.py
@@ -60,7 +71,7 @@ http://127.0.0.1:8768/共读.html
 The launcher writes `启动信息.md` in the workspace with the selected HTTP and
 WebSocket ports.
 
-## 3. Try Reader-Only Mode
+### Try Reader-Only Mode
 
 If you want to verify the UI without connecting a model:
 
@@ -70,7 +81,7 @@ COREAD_MODEL_ENABLED=0 python3 /tmp/reading-companion-demo/启动共读.py
 
 You can still open the reader, paste excerpts, highlight, and write logs.
 
-## 4. Try Model Replies
+### Try Model Replies
 
 If `claude`, `codex`, or `gemini` is available on `PATH`, the launcher attempts
 to use it automatically.
@@ -81,7 +92,7 @@ To force a specific command:
 COREAD_MODEL_ENABLED=1 COREAD_MODEL_CLI=codex python3 /tmp/reading-companion-demo/启动共读.py
 ```
 
-## 5. Use A Local Book File
+### Use A Local Book File
 
 Pass an explicit source path:
 

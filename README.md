@@ -58,9 +58,37 @@ This repository does **not** include real user reading data, private book files,
 conversation logs, profile files, harness state, API keys, or personal absolute
 paths. Runtime data belongs in the reading workspace you create.
 
-## Quick Start
+## Use It As A Skill
 
-Create a blank reading workspace:
+Install this folder as an agent skill in the place your agent CLI loads skills
+from. Keep the folder name `reading-companion`, then restart or reload the
+agent if your runtime requires it.
+
+Then ask your agent to start a reading session, for example:
+
+```text
+Use reading-companion to read The Manager's Path with me.
+```
+
+or:
+
+```text
+Start a co-reading workspace for this local EPUB and help me turn highlights
+into cards.
+```
+
+The agent should use this skill to:
+
+- choose or create a reading workspace outside the skill package
+- resolve the book or start in excerpt-only mode
+- run the workspace launcher: `python3 <reading-workspace>/启动共读.py`
+- give you the local URL after the launcher is running
+- read `profile.md`, `profile-signals.jsonl`, and recent session state before the next session
+
+## Manual Smoke Test
+
+If you want to try the runtime without installing it into an agent first, create
+a disposable reading workspace:
 
 ```bash
 python3 scripts/init_reading_workspace.py /tmp/reading-companion-demo --book "Demo Book" --source-mode user-input-driven
