@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>阅读看板</title>
+  <style>
+    :root {
+      --bg: #f6f3ee;
+      --panel: #fffdf8;
+      --line: #ded6c8;
+      --text: #28231e;
+      --muted: #71695f;
+      --accent: #516b55;
+      --accent-soft: #e3eadc;
+      --warm: #a76542;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 22px 64px; }
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 18px;
+      margin-bottom: 20px;
+    }
+    h1 { margin: 0; font-size: 26px; }
+    .small { color: var(--muted); font-size: 13px; }
+    a.button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 7px;
+      padding: 7px 11px;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .metric { font-size: 26px; font-weight: 750; }
+    .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0; }
+    .tab {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 999px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .section { display: none; }
+    .section.active { display: block; }
+    .list { display: grid; gap: 10px; }
+    .item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbf8f1;
+    }
+    .tag {
+      display: inline-block;
+      font-size: 11px;
+      border-radius: 999px;
+      padding: 2px 7px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      margin-right: 4px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      font: inherit;
+      background: #fff;
+    }
+    @media (max-width: 820px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>阅读看板</h1>
+        <div class="small">从共读过程投影出来的进度、卡片和阅读档案。</div>
+      </div>
+      <a class="button" href="./co-reading.html">回到共读</a>
+    </header>
+
+    <div class="grid">
+      <div class="panel"><div class="small">当前书</div><div class="metric" id="bookMetric">-</div></div>
+      <div class="panel"><div class="small">摘抄</div><div class="metric" id="excerptMetric">0</div></div>
+      <div class="panel"><div class="small">卡片</div><div class="metric" id="cardMetric">0</div></div>
+      <div class="panel"><div class="small">消息</div><div class="metric" id="messageMetric">0</div></div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="overview">概览</button>
+      <button class="tab" data-tab="cards">卡片</button>
+      <button class="tab" data-tab="profile">阅读档案</button>
+      <button class="tab" data-tab="data">数据</button>
+    </div>
+
+    <section id="overview" class="section active">
+      <div class="panel">
+        <h2>当前状态</h2>
+        <div id="overviewBody" class="small"></div>
+      </div>
+    </section>
+
+    <section id="cards" class="section">
+      <div class="panel">
+        <h2>卡片墙</h2>
+        <div id="cardList" class="list"></div>
+      </div>
+    </section>
+
+    <section id="profile" class="section">
+      <div class="panel">
+        <h2>阅读档案</h2>
+        <p class="small">模板默认不写用户画像。正式适配时，agent 应从 workspace 的 profile 文件读取并投影到这里。</p>
+        <div id="profileBody" class="list"></div>
+      </div>
+    </section>
+
+    <section id="data" class="section">
+      <div class="panel">
+        <h2>本地页面状态</h2>
+        <textarea id="rawData"></textarea>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const state = JSON.parse(localStorage.getItem("reading-companion-state-v1") || "{}");
+    state.cards ||= [];
+    state.messages ||= [];
+    state.excerpts ||= [];
+
+    const $ = (id) => document.getElementById(id);
+    const escapeHtml = (text) => String(text).replace(/[&<>"']/g, ch => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" }[ch]));
+
+    $("bookMetric").textContent = state.bookTitle || "-";
+    $("excerptMetric").textContent = state.excerpts.length;
+    $("cardMetric").textContent = state.cards.length;
+    $("messageMetric").textContent = state.messages.length;
+    $("overviewBody").innerHTML = `
+      <p><strong>书名：</strong>${escapeHtml(state.bookTitle || "未设置")}</p>
+      <p><strong>来源模式：</strong>${escapeHtml(state.sourceMode || "未设置")}</p>
+      <p><strong>当前位置：</strong>${escapeHtml(state.position || "未设置")}</p>
+    `;
+    $("cardList").innerHTML = state.cards.length ? state.cards.map(card => `
+      <div class="item">
+        <span class="tag">${escapeHtml(card.status || "draft")}</span>
+        <span class="tag">${escapeHtml(card.type || "concept")}</span>
+        <strong>${escapeHtml(card.title || "未命名卡片")}</strong>
+        <div class="small">${escapeHtml(card.seed || "")}</div>
+      </div>
+    `).join("") : `<p class="small">还没有卡片。</p>`;
+    $("profileBody").innerHTML = `<div class="item small">暂无主动画像。阅读偏好应由 agent 根据 profile.md / profile-signals.jsonl 投影。</div>`;
+    $("rawData").value = JSON.stringify(state, null, 2);
+
+    document.querySelectorAll(".tab").forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+        document.querySelectorAll(".section").forEach(x => x.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.tab).classList.add("active");
+      };
+    });
+  </script>
+</body>
+</html>

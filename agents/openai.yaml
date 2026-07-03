@@ -1,0 +1,7 @@
+interface:
+  display_name: "Reading Companion"
+  short_description: "Interactive reading with cards and profile"
+  default_prompt: "Use $reading-companion to start an interactive reading session for a book."
+
+policy:
+  allow_implicit_invocation: true

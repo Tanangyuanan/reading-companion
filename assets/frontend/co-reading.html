@@ -1,0 +1,2990 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>共读搭子</title>
+  <link rel="icon" href="data:,">
+
+  <!-- epub.js 本地化，避免 file:// / CDN 兼容问题 -->
+  <script src="./共读_files/jszip.min.js"></script>
+  <script src="./共读_files/epub.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #f8f7f4;
+      --card: #ffffff;
+      --border: #e4ded2;
+      --text: #27231f;
+      --muted: #766f64;
+      --accent: #6d7f5f;
+      --highlight: #fdf3c4;
+      --left-col: 260px;
+      --right-col: 360px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      overflow: hidden;
+    }
+
+    /* 三栏布局：左目录 | 中阅读区 | 右共读搭子 */
+    .layout {
+      display: grid;
+      grid-template-columns: var(--left-col) 6px minmax(420px, 1fr) 6px var(--right-col);
+      height: calc(100vh - 49px);
+      min-height: 0;
+      transition: grid-template-columns .22s ease;
+    }
+    body.left-collapsed .layout {
+      grid-template-columns: 48px 6px minmax(420px, 1fr) 6px var(--right-col);
+    }
+    body.resizing,
+    body.resizing * {
+      cursor: col-resize !important;
+      user-select: none !important;
+    }
+    body.resizing .layout {
+      transition: none;
+    }
+    .splitter {
+      min-width: 6px;
+      background: transparent;
+      border-inline: 1px solid transparent;
+      cursor: col-resize;
+      position: relative;
+      z-index: 3;
+    }
+    .splitter::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 2px;
+      width: 2px;
+      background: transparent;
+      transition: background .16s ease;
+    }
+    .splitter:hover::after,
+    body.resizing .splitter.active::after {
+      background: #d5ccb9;
+    }
+
+    /* 顶部状态栏 */
+    .topbar {
+      position: sticky; top: 0; z-index: 10;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 20px;
+      display: flex; align-items: center; gap: 16px;
+      font-size: 13px;
+    }
+    .topbar .book { font-weight: 600; white-space: nowrap; }
+    .topbar .chapter { color: var(--muted); }
+    .topbar .progress { flex: 1; height: 6px; background: #ece6dc; border-radius: 999px; overflow: hidden; }
+    .topbar .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width .3s; }
+    .topbar .source-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .topbar select {
+      max-width: 220px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font: inherit;
+      font-size: 13px;
+    }
+    .topbar .actions { display: flex; gap: 8px; align-items: center; }
+    .topbar button {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 4px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .topbar button:hover { background: var(--bg); }
+    .file-button {
+      position: relative;
+      overflow: hidden;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 4px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1.65;
+      white-space: nowrap;
+    }
+    .file-button:hover { background: var(--bg); }
+    .file-button input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    /* 左侧阅读导航 */
+    .toc-sidebar {
+      height: calc(100vh - 49px);
+      background: var(--card);
+      border-right: 1px solid var(--border);
+      padding: 14px 12px;
+      overflow: hidden;
+      font-size: 13px;
+      min-width: 0;
+      position: relative;
+    }
+    .sidebar-content {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .sidebar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 0 0 10px;
+      flex: 0 0 auto;
+    }
+    .toc-title {
+      font-size: 13px;
+      font-weight: 650;
+      margin: 0;
+      white-space: nowrap;
+    }
+    .sidebar-toggle {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+    .sidebar-toggle:hover { background: var(--bg); color: var(--text); }
+    .sidebar-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
+      flex: 0 0 auto;
+    }
+    .sidebar-tab {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+    }
+    .sidebar-tab.active {
+      background: var(--bg);
+      color: var(--text);
+      border-color: #d5ccb9;
+      font-weight: 600;
+    }
+    .sidebar-pane {
+      display: none;
+      overflow-y: auto;
+      min-height: 0;
+      padding-right: 2px;
+    }
+    .sidebar-pane.active {
+      display: block;
+      flex: 1 1 auto;
+    }
+    .toc-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .toc-item {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+      padding: 7px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      font: inherit;
+      line-height: 1.35;
+    }
+    .toc-item:hover,
+    .toc-item.active {
+      background: var(--bg);
+      color: var(--text);
+    }
+    .toc-empty {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 8px;
+    }
+    .plan-kicker {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+      margin: 0 0 10px;
+    }
+    .plan-focus {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.45;
+      font-weight: 650;
+      margin: 0 0 8px;
+    }
+    .plan-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+      margin: 0 0 12px;
+    }
+    .plan-block {
+      border-top: 1px dashed var(--border);
+      padding: 11px 0;
+    }
+    .plan-block:first-child { border-top: 0; padding-top: 0; }
+    .plan-title {
+      margin: 0 0 7px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .plan-list {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .plan-list li { margin: 4px 0; }
+    .plan-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .plan-tag {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      border: 1px solid var(--border);
+      background: #fbfaf7;
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .plan-actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .plan-action {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 7px 9px;
+      font: inherit;
+      font-size: 12px;
+      line-height: 1.35;
+      cursor: pointer;
+      text-align: left;
+    }
+    .plan-action:hover {
+      background: var(--bg);
+      border-color: #d5ccb9;
+    }
+    .sidebar-rail {
+      display: none;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+    }
+    .rail-button {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--muted);
+      border-radius: 8px;
+      width: 30px;
+      min-height: 108px;
+      padding: 8px 5px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 12px;
+      line-height: 1.25;
+      writing-mode: vertical-rl;
+      letter-spacing: 0;
+    }
+    .rail-button:hover { background: var(--bg); color: var(--text); }
+    body.left-collapsed .toc-sidebar {
+      padding: 8px;
+      overflow: hidden;
+    }
+    body.left-collapsed .sidebar-content { display: none; }
+    body.left-collapsed .sidebar-rail { display: flex; }
+
+    /* 阅读区 */
+    .reader-column {
+      min-width: 0;
+      overflow: hidden;
+      padding: 24px;
+      scroll-behavior: smooth;
+      overscroll-behavior: contain;
+    }
+    #viewer {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 24px 32px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      height: calc(100vh - 49px - 48px);
+      min-height: 520px;
+      overflow: hidden;
+      scroll-behavior: smooth;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+    #viewer p { margin: 0 0 1em; }
+    #viewer ::selection { background: var(--highlight); }
+    #viewer .epubjs-hl,
+    #viewer .co-read-highlight {
+      pointer-events: none;
+      opacity: 0.34;
+    }
+    .doc-highlight {
+      border-radius: 3px;
+      padding: 0 1px;
+      box-decoration-break: clone;
+      -webkit-box-decoration-break: clone;
+      background: rgba(246, 217, 107, 0.38);
+    }
+    .hl-case { background: rgba(238, 154, 73, 0.34); }
+    .hl-quote { background: rgba(246, 217, 107, 0.42); }
+    .hl-question { background: rgba(112, 166, 224, 0.32); }
+    .hl-resonate { background: rgba(224, 137, 169, 0.30); }
+    .hl-disagree { background: rgba(218, 103, 94, 0.32); }
+    .hl-action { background: rgba(104, 170, 119, 0.32); }
+    .hl-insight { background: rgba(157, 132, 214, 0.32); }
+    #viewer.generic-viewer {
+      overflow-y: auto;
+    }
+    .doc-content {
+      max-width: 680px;
+      margin: 0 auto;
+      color: var(--text);
+      font-size: 17px;
+      line-height: 1.85;
+    }
+    .doc-content h1,
+    .doc-content h2,
+    .doc-content h3 {
+      line-height: 1.35;
+      margin: 1.2em 0 .55em;
+    }
+    .doc-content h1 { font-size: 28px; }
+    .doc-content h2 { font-size: 22px; }
+    .doc-content h3 { font-size: 18px; }
+    .doc-content p { margin: 0 0 1em; }
+    .doc-content ul,
+    .doc-content ol { padding-left: 1.35em; }
+    .doc-content blockquote {
+      margin: 1em 0;
+      padding: .2em 0 .2em 1em;
+      border-left: 3px solid #d9c487;
+      color: var(--muted);
+    }
+    .doc-content pre {
+      white-space: pre-wrap;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      overflow: auto;
+    }
+    .doc-content code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .92em;
+      background: rgba(0,0,0,.05);
+      border-radius: 4px;
+      padding: 1px 4px;
+    }
+    .doc-content section {
+      margin: 0 0 56px;
+      scroll-margin-top: 68px;
+    }
+    .doc-content .note,
+    .doc-content .modern,
+    .doc-content .quote,
+    .doc-content .reflect {
+      margin: 18px 0;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent);
+      border-radius: 6px;
+      background: var(--bg);
+    }
+    .doc-content .modern::before {
+      content: "今天的参照";
+      display: block;
+      margin-bottom: 6px;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .doc-content .grid4,
+    .doc-content .map-cols {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .doc-content .cell,
+    .doc-content .map-col,
+    .doc-content .line {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+    }
+    .doc-content .label,
+    .doc-content .tag,
+    .doc-content .dates,
+    .doc-content .place {
+      color: var(--muted);
+      font-size: .86em;
+      font-weight: 600;
+    }
+    .doc-content textarea {
+      width: 100%;
+      min-height: 92px;
+      margin-top: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      resize: vertical;
+      font: inherit;
+    }
+    .doc-highlight {
+      background: rgba(246, 217, 107, .45);
+      border-radius: 2px;
+    }
+    .embedded-doc {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      border-radius: 6px;
+      background: var(--card);
+    }
+    .unsupported-doc {
+      max-width: 620px;
+      margin: 80px auto;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .unsupported-doc h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+    .unsupported-doc p {
+      color: var(--muted);
+      margin: 6px 0;
+    }
+
+    body.immersive {
+      background: #f4f1ea;
+    }
+    body.immersive .topbar,
+    body.immersive .toc-sidebar,
+    body.immersive .companion {
+      display: none;
+    }
+    body.immersive .layout {
+      display: block;
+      height: 100vh;
+    }
+    body.immersive .reader-column {
+      height: 100vh;
+      padding: 28px;
+    }
+    body.immersive #viewer {
+      height: calc(100vh - 56px);
+      max-width: min(860px, calc(100vw - 80px));
+      padding: 34px 46px;
+      box-shadow: 0 12px 40px rgba(50, 42, 31, 0.08);
+    }
+    .immersive-controls {
+      position: fixed;
+      right: 22px;
+      top: 18px;
+      z-index: 80;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,.9);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px;
+      box-shadow: 0 8px 24px rgba(39,35,31,.08);
+      backdrop-filter: blur(8px);
+      font-size: 12px;
+    }
+    body.immersive .immersive-controls {
+      display: flex;
+    }
+    .immersive-controls select,
+    .immersive-controls input,
+    .immersive-controls button {
+      font: inherit;
+    }
+    .immersive-controls select,
+    .immersive-controls button {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 5px 8px;
+    }
+    .immersive-controls button {
+      cursor: pointer;
+    }
+    .immersive-controls input[type="range"] {
+      width: 82px;
+      accent-color: var(--accent);
+    }
+
+    .file-warning {
+      max-width: 620px;
+      margin: 80px auto;
+      color: var(--text);
+      text-align: left;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+    .file-warning h2 {
+      margin: 0 0 8px;
+      font-size: 18px;
+    }
+    .file-warning p {
+      color: var(--muted);
+      margin: 6px 0 14px;
+    }
+    .file-warning code {
+      display: block;
+      white-space: normal;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+    }
+
+    /* 右侧共读搭子 */
+    .companion {
+      height: calc(100vh - 49px);
+      background: var(--card);
+      border-left: 1px solid var(--border);
+      padding: 14px 16px;
+      overflow: hidden;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .companion .head {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 600; font-size: 14px;
+      flex: 0 0 auto;
+    }
+    .companion .head .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(109, 127, 95, 0.18);
+    }
+    .companion .book-title {
+      color: var(--muted);
+      font-size: 12px;
+      margin: 6px 0 10px;
+      flex: 0 0 auto;
+    }
+    .companion .section {
+      border-top: 1px dashed var(--border);
+      padding: 10px 0;
+      flex: 0 0 auto;
+    }
+    .companion .section:first-of-type { border-top: 0; }
+    .companion .section-title {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin: 0 0 6px;
+    }
+    .companion .value {
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 560;
+    }
+    .companion .muted { color: var(--muted); font-size: 12px; }
+    .companion .quote {
+      background: #fdf3c4;
+      border-left: 3px solid #d9b95b;
+      padding: 8px 10px;
+      border-radius: 0 4px 4px 0;
+      margin: 6px 0 0;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .companion .hint {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .companion .count {
+      display: inline-block;
+      background: var(--accent);
+      color: var(--card);
+      border-radius: 999px;
+      padding: 1px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 6px;
+    }
+    .reading-context {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 10px;
+      align-items: baseline;
+      border-top: 1px dashed var(--border);
+      padding: 10px 0;
+    }
+    .reading-context .value {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .reading-context .muted { white-space: nowrap; }
+    .fold-section {
+      flex: 0 0 auto;
+      border-top: 1px dashed var(--border);
+      padding: 8px 0;
+    }
+    .fold-section summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 12px;
+      list-style: none;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .fold-section summary::-webkit-details-marker { display: none; }
+    .fold-section summary::after {
+      content: "展开";
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .fold-section[open] summary::after { content: "收起"; }
+
+    /* 划线气泡 */
+    .selection-bubble {
+      position: absolute;
+      background: var(--text);
+      color: var(--card);
+      border-radius: 8px;
+      padding: 6px;
+      font-size: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,.15);
+      transform: translate(-50%, -120%);
+      display: none;
+      z-index: 40;
+      white-space: nowrap;
+      gap: 4px;
+    }
+    .selection-bubble.show { display: flex; }
+    .selection-bubble button {
+      border: 0;
+      background: rgba(255,255,255,.12);
+      color: var(--card);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .selection-bubble button:hover { background: rgba(255,255,255,.22); }
+
+    /* 右栏划线列表 */
+    .drawer {
+      position: static;
+      width: auto;
+      height: auto;
+      background: transparent;
+      border-left: 0;
+      padding: 0;
+      overflow: visible;
+      transition: none;
+      z-index: auto;
+    }
+    .drawer h3 { margin-top: 0; }
+    .line-item {
+      border-top: 1px dashed var(--border);
+      padding: 10px 0;
+      font-size: 13px;
+    }
+    .line-item:first-of-type { border-top: 0; }
+    .line-item .meta { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+    .line-item .quote { color: var(--text); font-style: italic; }
+    .line-item .note { color: var(--accent); margin-top: 4px; }
+    .line-item .line-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .line-tag {
+      display: inline-block;
+      color: var(--accent);
+      background: rgba(109, 127, 95, 0.1);
+      border-radius: 999px;
+      padding: 1px 7px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-right: 6px;
+    }
+    .line-remove {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 0;
+      flex: 0 0 auto;
+    }
+    .line-remove:hover { color: #a23b3b; }
+
+    /* 提示条 */
+    .toast {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      background: var(--text); color: var(--card);
+      padding: 10px 18px; border-radius: 6px; font-size: 13px;
+      opacity: 0; transition: opacity .25s;
+      z-index: 30;
+    }
+    .toast.show { opacity: 1; }
+
+    /* 右栏聊天 */
+    .chat-fab {
+      display: none;
+    }
+    .chat-fab .badge {
+      position: absolute; top: -4px; right: -4px;
+      background: #d44; color: #fff;
+      width: 18px; height: 18px; border-radius: 50%;
+      font-size: 11px; display: none;
+      align-items: center; justify-content: center;
+      font-weight: 600;
+    }
+    .chat-fab .badge.show { display: flex; }
+
+    .chat-panel {
+      position: static;
+      width: 100%;
+      height: clamp(360px, 58vh, 520px);
+      flex: 0 0 auto;
+      min-height: 0;
+      max-height: none;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
+      z-index: auto;
+      overflow: hidden;
+    }
+    .chat-panel.open { display: flex; }
+    .chat-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      font-size: 13px; font-weight: 600;
+      flex: 0 0 auto;
+    }
+    .chat-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+    .chat-head .status { color: var(--muted); font-weight: 400; font-size: 12px; }
+    .chat-body {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 8px 10px;
+      font-size: 13px; line-height: 1.55;
+      min-height: 120px;
+      max-height: none;
+      scroll-padding: 8px;
+      overflow-anchor: none;
+      scrollbar-gutter: stable;
+    }
+    .history-more {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+    .history-more:hover { color: var(--text); background: var(--card); }
+    .msg { margin: 6px 0; }
+    .msg:first-child { margin-top: 0; }
+    .msg:last-child { margin-bottom: 0; }
+    .msg.reader { text-align: right; }
+    .msg .bubble {
+      display: inline-block;
+      position: static;
+      transform: none;
+      cursor: default;
+      box-shadow: none;
+      color: var(--text);
+      max-width: 82%;
+      padding: 8px 12px; border-radius: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      text-align: left;
+    }
+    .msg .bubble p {
+      margin: 0 0 8px;
+    }
+    .msg .bubble p:last-child {
+      margin-bottom: 0;
+    }
+    .msg .bubble ul {
+      margin: 6px 0 8px;
+      padding-left: 18px;
+    }
+    .msg .bubble li {
+      margin: 3px 0;
+    }
+    .msg .bubble code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.92em;
+      background: rgba(0,0,0,0.06);
+      border-radius: 4px;
+      padding: 1px 4px;
+    }
+    .msg.reader .bubble {
+      background: var(--accent);
+      color: var(--card);
+      border-color: var(--accent);
+    }
+    .msg.thinking .bubble {
+      color: var(--muted);
+      background: transparent;
+      border-style: dashed;
+    }
+    .chat-thinking {
+      flex: 0 0 auto;
+      border-top: 1px solid var(--border);
+      padding: 6px 10px;
+      color: var(--muted);
+      background: #fbfaf7;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .chat-thinking[hidden] { display: none; }
+    .message-more {
+      display: block;
+      margin-top: 6px;
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      padding: 0;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .msg .meta { color: var(--muted); font-size: 10px; margin: 2px 6px; }
+    .msg.reader .meta { text-align: right; }
+    .chat-input {
+      border-top: 1px solid var(--border);
+      padding: 8px 10px;
+      display: flex; gap: 8px;
+      align-items: flex-end;
+      flex: 0 0 auto;
+    }
+    .insight-bar {
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      flex: 0 0 auto;
+    }
+    .insight-bar[hidden] { display: none; }
+    .insight-bar button {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--accent);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font: inherit;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+    .insight-bar button:hover { background: #f5f2eb; }
+    .chat-input textarea {
+      flex: 1; padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      line-height: 1.45;
+      resize: none;
+      min-height: 56px;
+      max-height: 160px;
+    }
+    .chat-input textarea:focus { border-color: var(--accent); }
+    .chat-input button {
+      min-height: 38px;
+      padding: 8px 14px;
+      background: var(--accent); color: var(--card);
+      border: none; border-radius: 6px;
+      cursor: pointer; font-size: 13px;
+    }
+    .chat-input button:disabled { background: var(--muted); cursor: not-allowed; }
+    .companion .chat-section {
+      flex: 0 0 auto;
+      min-height: 0;
+      padding: 8px 0 10px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    @media (max-width: 1100px) {
+      body { overflow: auto; }
+      .layout {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .splitter { display: none; }
+      .toc-sidebar,
+      .companion {
+        border: 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .toc-sidebar { height: auto; }
+      .companion {
+        height: calc(100vh - 49px);
+        min-height: 640px;
+      }
+      .chat-panel {
+        height: clamp(340px, 56vh, 500px);
+        min-height: 0;
+      }
+      .reader-column { overflow: visible; }
+      #viewer {
+        height: 70vh;
+        min-height: 520px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="book" id="sourceTitle">未选择书籍</span>
+  <span class="chapter" id="chapter">序言</span>
+  <div class="source-picker">
+    <select id="sourceSelect" title="选择内容"></select>
+    <label class="file-button" title="导入本地文件">
+      导入
+      <input id="fileInput" type="file" accept=".epub,.html,.htm,.md,.markdown,.txt,.pdf,.doc,.docx,.ppt,.pptx,application/epub+zip,text/html,text/markdown,text/plain,application/pdf">
+    </label>
+  </div>
+  <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+  <span style="color: var(--muted); font-size: 12px;" id="progressText">0%</span>
+  <div class="actions">
+    <button onclick="prev()">← 上一页</button>
+    <button onclick="next()">下一页 →</button>
+    <button onclick="enterImmersive()">沉浸阅读</button>
+    <button onclick="exportToMd()">导出 .md</button>
+  </div>
+</div>
+
+<div class="immersive-controls" id="immersiveControls">
+  <select id="noiseSelect" title="白噪音">
+    <option value="off">无白噪</option>
+    <option value="white">白噪 · 风扇</option>
+    <option value="pink">粉噪 · 细雨</option>
+    <option value="brown">棕噪 · 远海</option>
+    <option value="rain">雨声</option>
+    <option value="fire">壁炉</option>
+    <option value="cafe">咖啡馆</option>
+  </select>
+  <input id="noiseVolume" type="range" min="0" max="0.45" step="0.01" value="0.18" title="音量">
+  <button id="noiseToggle" type="button">播放</button>
+  <button type="button" onclick="exitImmersive()">退出</button>
+</div>
+
+<div class="layout">
+  <aside class="toc-sidebar">
+    <div class="sidebar-content">
+      <div class="sidebar-head">
+        <div class="toc-title">阅读导航</div>
+        <button class="sidebar-toggle" type="button" onclick="toggleLeftSidebar()" title="收起左栏">‹</button>
+      </div>
+      <div class="sidebar-tabs" role="tablist" aria-label="阅读导航">
+        <button class="sidebar-tab active" type="button" data-sidebar-tab="toc" onclick="switchSidebarTab('toc')">目录</button>
+        <button class="sidebar-tab" type="button" data-sidebar-tab="plan" onclick="switchSidebarTab('plan')">计划</button>
+      </div>
+      <div class="sidebar-pane active" id="tocPane" role="tabpanel">
+        <div class="toc-list" id="tocList">
+          <div class="toc-empty">正在读取目录…</div>
+        </div>
+      </div>
+      <div class="sidebar-pane" id="planPane" role="tabpanel">
+        <div class="plan-block">
+          <p class="plan-kicker">还没有读书计划</p>
+          <p class="plan-focus">可以先和共读搭子聊 3 个轻量问题，也可以直接生成一份通用计划。</p>
+          <p class="plan-note">没有用户画像时，不预设你的目的。计划会从当前书、你的回答、后续划线和对话里慢慢校准。</p>
+          <div class="plan-actions">
+            <button class="plan-action" type="button" onclick="sendPlanPrompt('questions')">回答 3 个问题后制定计划</button>
+            <button class="plan-action" type="button" onclick="sendPlanPrompt('generic')">先生成通用阅读计划</button>
+          </div>
+        </div>
+        <div class="plan-block">
+          <p class="plan-title">默认起步方式</p>
+          <ol class="plan-list">
+            <li>先读目录和开篇，确认这本书在解决什么问题。</li>
+            <li>遇到有反应的句子，用“疑问 / 共鸣 / 反对 / 行动 / 洞察”发给共读搭子。</li>
+            <li>只有当用户贡献了触发点、解释、例子或反对意见时，才把内容推进成卡片。</li>
+          </ol>
+        </div>
+        <div class="plan-block">
+          <p class="plan-title">优先深读</p>
+          <div class="plan-tags">
+            <span class="plan-tag">核心概念</span>
+            <span class="plan-tag">关键论证</span>
+            <span class="plan-tag">反直觉处</span>
+            <span class="plan-tag">可应用处</span>
+          </div>
+        </div>
+        <div class="plan-block">
+          <p class="plan-title">阅读路线</p>
+          <ol class="plan-list">
+            <li>先读目录和开篇，确定本书的问题意识。</li>
+            <li>按章节推进，遇到触动点就划线和对话。</li>
+            <li>把用户解释过、反对过或应用过的内容整理成卡片。</li>
+            <li>阶段性回看卡片，合并重复问题和概念。</li>
+          </ol>
+        </div>
+        <div class="plan-block">
+          <p class="plan-title">最后要沉淀</p>
+          <ul class="plan-list">
+            <li>概念卡、方法卡、案例卡</li>
+            <li>用户自己的例子、反对意见和应用想法</li>
+            <li>下一次继续阅读的进度和问题清单</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-rail">
+      <button class="rail-button" type="button" onclick="toggleLeftSidebar()" title="展开阅读导航">阅读导航</button>
+    </div>
+  </aside>
+  <div class="splitter" data-resize-side="left" aria-hidden="true"></div>
+
+  <main class="reader-column">
+    <div id="viewer">
+      <div id="loadingState" style="color: var(--muted); text-align: center; padding: 80px 0; font-size: 14px;">
+        正在打开书……<br>
+        <span style="font-size: 12px;" id="loadingDetail"></span>
+      </div>
+    </div>
+    <div class="selection-bubble" id="bubble" aria-label="记录划线">
+      <button type="button" data-tag="案例">案例</button>
+      <button type="button" data-tag="金句">金句</button>
+      <button type="button" data-tag="疑问">疑问</button>
+      <button type="button" data-tag="共鸣">共鸣</button>
+      <button type="button" data-tag="反对">反对</button>
+      <button type="button" data-tag="行动">行动</button>
+      <button type="button" data-tag="洞察">洞察</button>
+    </div>
+  </main>
+  <div class="splitter" data-resize-side="right" aria-hidden="true"></div>
+
+  <aside class="companion">
+    <div class="head">
+      <span class="dot"></span>
+      <span>你的共读搭子</span>
+    </div>
+    <div class="book-title">📖 未选择书籍</div>
+
+    <div class="reading-context">
+      <div class="value" id="companionChapter">序言</div>
+      <div class="muted" id="companionProgress">阅读进度 0%</div>
+    </div>
+
+    <div class="section chat-section">
+      <div class="chat-panel open" id="chatPanel">
+        <div class="chat-head">
+          <span>共读搭子</span>
+          <span class="status" id="chatStatus">连接中…</span>
+        </div>
+        <div class="chat-body" id="chatBody"></div>
+        <div class="chat-thinking" id="chatThinking" hidden>共读搭子正在想…</div>
+        <div class="insight-bar" id="insightBar" hidden>
+          <span id="insightText">这段可以沉淀</span>
+          <button id="insightSave" type="button">存为洞察</button>
+        </div>
+        <div class="chat-input">
+          <textarea id="chatInput" rows="1" placeholder="跟共读搭子说句话…" disabled></textarea>
+          <button id="chatSend" disabled>发送</button>
+        </div>
+      </div>
+    </div>
+
+    <details class="fold-section">
+      <summary>本次划线 <span class="count" id="companionLineCount">0</span></summary>
+      <div class="muted" id="companionLineHint">划过线后这里会出现记录</div>
+      <div class="drawer" id="drawer" style="margin-top: 8px;">
+        <div class="muted" style="margin-bottom: 8px;">已记录 <span id="lineCount">0</span> 条 <span id="drawerCount"></span></div>
+        <div id="lineList"></div>
+      </div>
+    </details>
+
+    <details class="fold-section">
+      <summary>上次共读留痕</summary>
+      <div class="muted">2026-06-16 · 序言</div>
+      <div class="quote">"工具的杠杆率依赖竞争尺度。大方桌在小尺度胜出，邮件在跨距离跨时区胜出。"</div>
+      <div class="muted" style="margin-top: 6px;">→ 关联沉淀卡：尺度—工具杠杆率</div>
+    </details>
+  </aside>
+</div>
+
+<div id="errorBox" style="display:none; max-width: 720px; margin: 24px auto; padding: 20px; background: #fff3f3; border: 1px solid #e8b4b4; border-radius: 8px; color: #8b2929; font-size: 13px;">
+  <strong>出错了：</strong>
+  <pre id="errorMsg" style="white-space: pre-wrap; margin: 8px 0 0; font-family: ui-monospace, monospace;"></pre>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- 聊天浮窗 -->
+<button class="chat-fab" id="chatFab" title="跟共读搭子说话">💬
+  <span class="badge" id="chatBadge">1</span>
+</button>
+
+<script>
+// ============ 配置 ============
+const EPUB_PATH = "./books/current.epub";
+const LINES_MD  = "./共读日志.md";
+function workspaceFilePath(path) {
+  return `/__workspace_file__?path=${encodeURIComponent(path)}`;
+}
+let BOOK_META = {
+  title: "未选择书籍",
+  author: "",
+  startedAt: ""
+};
+let CONTENT_SOURCES = [
+  {
+    id: "current-book",
+    type: "epub",
+    title: BOOK_META.title,
+    author: BOOK_META.author,
+    path: EPUB_PATH,
+    chapter: "正文",
+    plan: "选择一本书或导入本地文件后开始共读。"
+  },
+  {
+    id: "reading-status",
+    type: "md",
+    title: "阅读工作区 · 当前状态",
+    path: "./current-state.md",
+    chapter: "阅读状态",
+    plan: "用共读工作台查看当前阅读进度。"
+  }
+];
+const READABLE_TEXT_TYPES = new Set(["html", "md", "markdown", "txt"]);
+
+// ============ 错误显示 ============
+function showError(msg) {
+  const box = document.getElementById("errorBox");
+  document.getElementById("errorMsg").textContent = msg;
+  box.style.display = "block";
+  const loadingState = document.getElementById("loadingState");
+  if (loadingState) loadingState.style.display = "none";
+  console.error("[共读错误]", msg);
+  // 也在状态栏显示
+  const cs = document.getElementById("chatStatus");
+  if (cs) cs.textContent = "⚠️ " + msg.split("\n")[0].slice(0, 60);
+}
+
+function showFileModeNotice() {
+  const viewer = document.getElementById("viewer");
+  viewer.innerHTML = `
+    <div class="file-warning">
+      <h2>这个阅读器需要用本地服务打开</h2>
+      <p>你现在是用 file:// 打开的。浏览器会限制网页读取本地 EPUB，所以会卡在“解析 EPUB 元数据”。</p>
+      <p>在终端运行下面这两行，再打开 <strong>http://127.0.0.1:8768/共读.html</strong>：</p>
+      <code>cd "&lt;reading-workspace&gt;"<br>python3 共读搭子.py</code>
+    </div>
+  `;
+  if (tocListEl) {
+    tocListEl.innerHTML = '<div class="toc-empty">通过本地服务打开后会显示目录。</div>';
+  }
+  const cs = document.getElementById("chatStatus");
+  if (cs) cs.textContent = "需要通过 http://localhost 打开";
+}
+window.addEventListener("error", (e) => {
+  showError(`${e.message}\n(${e.filename}:${e.lineno})`);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  showError("Promise: " + (e.reason && e.reason.message || e.reason));
+});
+
+// ============ 库检查 ============
+if (typeof ePub === "undefined") {
+  showError("epub.js 库未加载。请确认 ./共读_files/epub.min.js 存在。");
+}
+if (typeof JSZip === "undefined") {
+  showError("JSZip 库未加载。请确认 ./共读_files/jszip.min.js 存在。");
+}
+
+// ============ DOM 引用 ============
+const chapterEl  = document.getElementById("chapter");
+const progFill   = document.getElementById("progressFill");
+const progText   = document.getElementById("progressText");
+const loadingEl  = document.getElementById("loadingState");
+const loadingDetail = document.getElementById("loadingDetail");
+const bubble     = document.getElementById("bubble");
+const drawerEl   = document.getElementById("drawer");
+const lineListEl = document.getElementById("lineList");
+const drawerCountEl = document.getElementById("drawerCount");
+const lineCountEl = document.getElementById("lineCount");
+const tocListEl = document.getElementById("tocList");
+const sourceTitleEl = document.getElementById("sourceTitle");
+const sourceSelectEl = document.getElementById("sourceSelect");
+const fileInputEl = document.getElementById("fileInput");
+const sidebarTabButtons = [...document.querySelectorAll("[data-sidebar-tab]")];
+
+let currentChapter = "";
+let currentHref    = "";
+let currentSource = getInitialSource();
+let currentObjectUrl = "";
+let temporarySource = null;
+let pendingSelection = null;
+let savedLines = normalizeSavedLines(JSON.parse(localStorage.getItem("co_read_lines") || "[]"));
+let lastLineAction = null;
+let readerHooksRegistered = false;
+const isFileMode = location.protocol === "file:";
+const defaultPlanHtml = document.getElementById("planPane").innerHTML;
+const HIGHLIGHT_STYLE_BY_TAG = {
+  "案例": { className: "hl-case", fill: "#ee9a49", opacity: "0.26" },
+  "金句": { className: "hl-quote", fill: "#f6d96b", opacity: "0.30" },
+  "疑问": { className: "hl-question", fill: "#70a6e0", opacity: "0.24" },
+  "共鸣": { className: "hl-resonate", fill: "#e089a9", opacity: "0.24" },
+  "反对": { className: "hl-disagree", fill: "#da675e", opacity: "0.25" },
+  "行动": { className: "hl-action", fill: "#68aa77", opacity: "0.25" },
+  "洞察": { className: "hl-insight", fill: "#9d84d6", opacity: "0.25" },
+  "划线": { className: "hl-default", fill: "#f6d96b", opacity: "0.22" }
+};
+
+function highlightStyleForTag(tag) {
+  return HIGHLIGHT_STYLE_BY_TAG[tag] || HIGHLIGHT_STYLE_BY_TAG["划线"];
+}
+
+function getRenditionHeight() {
+  const viewer = document.getElementById("viewer");
+  if (!viewer) return 720;
+  const style = getComputedStyle(viewer);
+  const verticalPadding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  return Math.max(420, Math.floor(viewer.clientHeight - verticalPadding));
+}
+
+function safeResizeRendition() {
+  if (!rendition || typeof rendition.resize !== "function") return;
+  try {
+    rendition.resize("100%", getRenditionHeight());
+  } catch (err) {
+    console.warn("[共读] resize skipped until EPUB renderer is ready", err);
+  }
+}
+
+function resizeReaderSoon() {
+  if (!rendition) return;
+  window.setTimeout(safeResizeRendition, 240);
+}
+
+function toggleLeftSidebar() {
+  document.body.classList.toggle("left-collapsed");
+  localStorage.setItem("co_read_left_collapsed", document.body.classList.contains("left-collapsed") ? "1" : "0");
+  resizeReaderSoon();
+}
+
+function switchSidebarTab(tab) {
+  const nextTab = tab === "plan" ? "plan" : "toc";
+  sidebarTabButtons.forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.sidebarTab === nextTab);
+  });
+  document.querySelectorAll(".sidebar-pane").forEach(pane => {
+    pane.classList.toggle("active", pane.id === `${nextTab}Pane`);
+  });
+  if (document.body.classList.contains("left-collapsed")) {
+    document.body.classList.remove("left-collapsed");
+    localStorage.setItem("co_read_left_collapsed", "0");
+  }
+  resizeReaderSoon();
+}
+
+if (localStorage.getItem("co_read_left_collapsed") === "1") {
+  document.body.classList.add("left-collapsed");
+}
+
+function applySavedColumnWidths() {
+  const left = Number(localStorage.getItem("co_read_left_col") || 260);
+  const right = Number(localStorage.getItem("co_read_right_col") || 360);
+  document.documentElement.style.setProperty("--left-col", `${clamp(left, 180, 420)}px`);
+  document.documentElement.style.setProperty("--right-col", `${clamp(right, 300, 560)}px`);
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function initColumnResizers() {
+  applySavedColumnWidths();
+  document.querySelectorAll("[data-resize-side]").forEach(handle => {
+    handle.addEventListener("pointerdown", event => {
+      if (window.matchMedia("(max-width: 1100px)").matches) return;
+      const side = handle.dataset.resizeSide;
+      const startX = event.clientX;
+      const layoutRect = document.querySelector(".layout").getBoundingClientRect();
+      const startLeft = Number(localStorage.getItem("co_read_left_col") || 260);
+      const startRight = Number(localStorage.getItem("co_read_right_col") || 360);
+      handle.classList.add("active");
+      document.body.classList.add("resizing");
+      handle.setPointerCapture(event.pointerId);
+
+      const onMove = moveEvent => {
+        const delta = moveEvent.clientX - startX;
+        if (side === "left" && !document.body.classList.contains("left-collapsed")) {
+          const maxLeft = Math.max(220, layoutRect.width - startRight - 560);
+          const nextLeft = clamp(startLeft + delta, 180, Math.min(420, maxLeft));
+          document.documentElement.style.setProperty("--left-col", `${nextLeft}px`);
+          localStorage.setItem("co_read_left_col", String(Math.round(nextLeft)));
+        }
+        if (side === "right") {
+          const maxRight = Math.max(320, layoutRect.width - startLeft - 560);
+          const nextRight = clamp(startRight - delta, 300, Math.min(560, maxRight));
+          document.documentElement.style.setProperty("--right-col", `${nextRight}px`);
+          localStorage.setItem("co_read_right_col", String(Math.round(nextRight)));
+        }
+        resizeReaderSoon();
+      };
+      const onUp = upEvent => {
+        handle.classList.remove("active");
+        document.body.classList.remove("resizing");
+        handle.releasePointerCapture(upEvent.pointerId);
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+        handle.removeEventListener("pointercancel", onUp);
+        resizeReaderSoon();
+      };
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointercancel", onUp);
+    });
+  });
+}
+
+initColumnResizers();
+
+// ============ 内容源初始化 ============
+// 用 var 保证函数作用域（let 在 try 块内会创建块级变量，外面访问会 TDZ）
+var book, rendition;
+
+bootReadingFrontend();
+
+async function bootReadingFrontend() {
+  await loadFrontendConfig();
+  initSourcePicker();
+  if (isFileMode) {
+    showFileModeNotice();
+  } else {
+    loadSource(currentSource);
+  }
+}
+
+async function loadFrontendConfig() {
+  if (isFileMode) return;
+  const candidates = ["./frontend-config.json", "../frontend-config.json"];
+  for (const path of candidates) {
+    try {
+      const res = await fetch(path, { cache: "no-store" });
+      if (!res.ok) continue;
+      const config = await res.json();
+      applyFrontendConfig(config);
+      return;
+    } catch (_) {
+      // Try the next relative path.
+    }
+  }
+}
+
+function applyFrontendConfig(config) {
+  if (!config || typeof config !== "object") return;
+  if (config.book && typeof config.book === "object") {
+    BOOK_META = {
+      title: config.book.title || BOOK_META.title,
+      author: config.book.author || BOOK_META.author,
+      startedAt: config.book.startedAt || BOOK_META.startedAt
+    };
+  }
+  if (Array.isArray(config.sources) && config.sources.length) {
+    CONTENT_SOURCES = config.sources.map((source, index) => ({
+      id: source.id || `source-${index + 1}`,
+      type: source.type || "epub",
+      title: source.title || BOOK_META.title || "未命名内容",
+      author: source.author || BOOK_META.author || "",
+      path: source.path || "",
+      chapter: source.chapter || "正文",
+      plan: source.plan || "开始共读。"
+    }));
+  }
+  currentSource = getInitialSource();
+}
+
+function initSourcePicker() {
+  if (!sourceSelectEl) return;
+  sourceSelectEl.innerHTML = CONTENT_SOURCES.map(source => (
+    `<option value="${escape(source.id)}">${escape(source.title)} · ${source.type.toUpperCase()}</option>`
+  )).join("");
+  sourceSelectEl.value = currentSource.id;
+  sourceSelectEl.addEventListener("change", () => {
+    const source = CONTENT_SOURCES.find(item => item.id === sourceSelectEl.value)
+      || (temporarySource && temporarySource.id === sourceSelectEl.value ? temporarySource : null);
+    if (source) loadSource(source);
+  });
+  if (fileInputEl) {
+    fileInputEl.addEventListener("change", (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (file) loadLocalFile(file);
+      event.target.value = "";
+    });
+  }
+}
+
+function getInitialSource() {
+  const params = new URLSearchParams(location.search);
+  const sourceId = params.get("source");
+  return CONTENT_SOURCES.find(source => source.id === sourceId) || CONTENT_SOURCES[0];
+}
+
+function cleanupCurrentReader() {
+  if (rendition && typeof rendition.destroy === "function") {
+    try { rendition.destroy(); } catch (e) {}
+  }
+  if (book && typeof book.destroy === "function") {
+    try { book.destroy(); } catch (e) {}
+  }
+  if (currentObjectUrl) {
+    URL.revokeObjectURL(currentObjectUrl);
+    currentObjectUrl = "";
+  }
+  book = null;
+  rendition = null;
+  readerHooksRegistered = false;
+  pendingSelection = null;
+  bubble.classList.remove("show");
+  document.getElementById("viewer").classList.remove("generic-viewer");
+}
+
+async function loadSource(source) {
+  cleanupCurrentReader();
+  currentSource = source;
+  sendSourceContext();
+  if (source.objectUrl) currentObjectUrl = source.objectUrl;
+  updateSourceChrome(source);
+  resetProgressForSource(source);
+  if (sourceSelectEl && [...sourceSelectEl.options].some(opt => opt.value === source.id)) {
+    sourceSelectEl.value = source.id;
+  }
+  if (source.type === "epub") {
+    loadEpubSource(source);
+    return;
+  }
+  if (source.type === "pdf") {
+    renderPdfSource(source.path, source);
+    return;
+  }
+  if (READABLE_TEXT_TYPES.has(source.type)) {
+    try {
+      const text = source.text != null ? source.text : await fetchText(source.path);
+      renderTextSource(text, source);
+    } catch (err) {
+      showError(`内容加载失败：${err.message || err}\n路径：${source.path || source.title}`);
+    }
+    return;
+  }
+  renderUnsupportedSource(source);
+}
+
+function loadEpubSource(source) {
+  const viewer = document.getElementById("viewer");
+  viewer.innerHTML = `
+    <div id="loadingState" style="color: var(--muted); text-align: center; padding: 80px 0; font-size: 14px;">
+      正在打开书……<br>
+      <span style="font-size: 12px;" id="loadingDetail">解析 EPUB 元数据…</span>
+    </div>
+  `;
+  try {
+    book = ePub(source.path, { openAs: "epub" });
+    rendition = book.renderTo("viewer", {
+      width: "100%",
+      height: getRenditionHeight(),
+      flow: "scrolled-doc",
+      spread: false,
+      manager: "continuous"
+    });
+  } catch (e) {
+    showError(`初始化失败：${e.message || e}`);
+    return;
+  }
+
+  registerReaderHooks();
+  rendition.on("relocated", (location) => {
+    currentHref = location.start.cfi;
+    const navItem = book.navigation && book.navigation.get(location.start.href);
+    currentChapter = navItem ? navItem.label.trim() : (source.chapter || "正文");
+    chapterEl.textContent = currentChapter;
+    const companionChapter = document.getElementById("companionChapter");
+    if (companionChapter) companionChapter.textContent = currentChapter;
+    updateActiveToc(location.start.href);
+    updateProgress();
+    restoreHighlights();
+  });
+
+  book.ready.then(() => {
+    const detail = document.getElementById("loadingDetail");
+    if (detail) detail.textContent = `共 ${book.spine.length} 章，准备渲染第一页…`;
+    renderToc();
+    return book.locations.generate(1024);
+  }).then(() => {
+    return rendition.display();
+  }).then(() => {
+    const state = document.getElementById("loadingState");
+    if (state) state.remove();
+    updateChapterLabel();
+    updateProgress();
+  }).catch(err => {
+    const msg = String(err && err.message || err);
+    if (/EpubCFI|not a valid argument/i.test(msg) && book) {
+      const state = document.getElementById("loadingState");
+      if (state) state.remove();
+      updateChapterLabel();
+      console.warn("[共读] EPUB 定位/进度异常，已降级继续阅读：", msg);
+      const cs = document.getElementById("chatStatus");
+      if (cs && cs.textContent.startsWith("⚠️")) cs.textContent = "已加载 · 准备连接…";
+      return;
+    }
+    showError(`EPUB 加载失败：${msg}\n路径：${source.path}`);
+  });
+}
+
+async function fetchText(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.text();
+}
+
+function loadLocalFile(file) {
+  const type = detectSourceType(file.name, file.type);
+  const source = {
+    id: `local-${Date.now()}`,
+    type,
+    title: file.name.replace(/\.[^.]+$/, ""),
+    fileName: file.name,
+    chapter: "本地导入",
+    plan: "临时导入内容"
+  };
+  if (source.type === "pdf" || source.type === "epub") {
+    source.objectUrl = URL.createObjectURL(file);
+    source.path = source.objectUrl;
+    addTemporarySourceOption(source);
+    loadSource(source);
+    return;
+  }
+  if (READABLE_TEXT_TYPES.has(source.type)) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      source.text = String(reader.result || "");
+      addTemporarySourceOption(source);
+      loadSource(source);
+    };
+    reader.onerror = () => showError(`读取本地文件失败：${file.name}`);
+    reader.readAsText(file, "utf-8");
+    return;
+  }
+  source.path = file.name;
+  addTemporarySourceOption(source);
+  loadSource(source);
+}
+
+function addTemporarySourceOption(source) {
+  if (!sourceSelectEl) return;
+  temporarySource = source;
+  const old = sourceSelectEl.querySelector('option[data-local="1"]');
+  if (old) old.remove();
+  const option = document.createElement("option");
+  option.value = source.id;
+  option.dataset.local = "1";
+  option.textContent = `${source.title} · ${source.type.toUpperCase()}`;
+  sourceSelectEl.appendChild(option);
+  sourceSelectEl.value = source.id;
+}
+
+function detectSourceType(name, mime = "") {
+  const ext = String(name || "").split(".").pop().toLowerCase();
+  if (ext === "epub" || mime.includes("epub")) return "epub";
+  if (ext === "pdf" || mime.includes("pdf")) return "pdf";
+  if (ext === "html" || ext === "htm" || mime.includes("html")) return "html";
+  if (ext === "md" || ext === "markdown") return "md";
+  if (ext === "txt" || mime.startsWith("text/plain")) return "txt";
+  if (ext === "doc" || ext === "docx") return "word";
+  if (ext === "ppt" || ext === "pptx") return "ppt";
+  return ext || "file";
+}
+
+function updateSourceChrome(source) {
+  const title = source.title || "未命名内容";
+  document.title = `共读 · ${title}`;
+  if (sourceTitleEl) sourceTitleEl.textContent = title;
+  chapterEl.textContent = source.chapter || "正文";
+  currentChapter = source.chapter || "正文";
+  currentHref = source.path || source.id;
+  const companionTitle = document.querySelector(".companion .book-title");
+  if (companionTitle) companionTitle.textContent = `📖 ${title}`;
+  const companionChapter = document.getElementById("companionChapter");
+  if (companionChapter) companionChapter.textContent = currentChapter;
+  renderPlanForSource(source);
+}
+
+function resetProgressForSource(source) {
+  progFill.style.width = source.type === "epub" ? "0%" : "100%";
+  progText.textContent = source.type === "epub" ? "0%" : "文档";
+  const compPct = document.getElementById("companionProgress");
+  if (compPct) compPct.textContent = source.type === "epub" ? "阅读进度 0%" : `${source.type.toUpperCase()} · 可共读`;
+}
+
+function renderPlanForSource(source) {
+  const planPane = document.getElementById("planPane");
+  if (!planPane) return;
+  if (source.id === "current-book") {
+    planPane.innerHTML = defaultPlanHtml;
+    return;
+  }
+  planPane.innerHTML = `
+    <div class="plan-block">
+      <p class="plan-kicker">${escape(source.type.toUpperCase())} · 通用共读内容</p>
+      <p class="plan-focus">${escape(source.title || "未命名内容")}</p>
+      <p class="plan-note">${escape(source.plan || "这份内容还没有单独的阅读计划。你可以先读，边划线边和共读搭子一起生成目标、问题和洞察。")}</p>
+    </div>
+    <div class="plan-block">
+      <p class="plan-title">建议读法</p>
+      <ol class="plan-list">
+        <li>先扫目录或标题，判断这份内容要解决什么问题。</li>
+        <li>用“疑问 / 共鸣 / 洞察 / 行动”标出值得聊的句子。</li>
+        <li>读完后把共读搭子回复里真正有用的部分存为洞察。</li>
+      </ol>
+    </div>
+  `;
+}
+
+function sendPlanPrompt(mode) {
+  const title = (currentSource && currentSource.title) || BOOK_META.title || "这本书";
+  openChatPanel();
+  if (mode === "questions") {
+    sendCompanionMessage(
+      `我还没有这本书的阅读计划。请先不要直接替我定计划。\n\n` +
+      `我正在读《${title}》。请你只问我 3 个很轻量的问题，用来判断：我为什么读、想读多深、最后想沉淀成什么。\n\n` +
+      `问题要好回答，不要像问卷；等我回答后，再帮我生成一份可执行的阅读计划。`,
+      { clearInput: false }
+    );
+    return;
+  }
+  sendCompanionMessage(
+    `我暂时不想回答问题。请基于《${title}》先生成一份通用阅读计划。\n\n` +
+    `要求：\n` +
+    `- 不要假设我的身份、职业或具体应用场景。\n` +
+    `- 给出一个从目录/第一章开始的阅读路线。\n` +
+    `- 告诉我读的时候应该优先标记哪些内容。\n` +
+    `- 说明哪些内容可以沉淀为概念卡、方法卡、案例卡。\n` +
+    `- 最后留一个问题，方便我把计划调整成更个人化。`,
+    { clearInput: false }
+  );
+}
+
+function renderTextSource(text, source) {
+  const viewer = document.getElementById("viewer");
+  viewer.classList.add("generic-viewer");
+  const html = source.type === "html"
+    ? sanitizeDocumentHtml(text)
+    : source.type === "txt"
+      ? `<pre>${escape(text)}</pre>`
+      : renderDocumentMarkdown(text);
+  viewer.innerHTML = `<article class="doc-content" id="docContent">${html}</article>`;
+  setupGenericSelection();
+  renderGenericToc();
+}
+
+function sanitizeDocumentHtml(text) {
+  const doc = new DOMParser().parseFromString(text, "text/html");
+  doc.querySelectorAll("script, style, link, iframe, object, embed").forEach(node => node.remove());
+  const main = doc.querySelector("main, article, .wrap") || doc.body;
+  const body = main ? main.innerHTML : text;
+  return body || "<p>这个 HTML 没有可显示内容。</p>";
+}
+
+function renderDocumentMarkdown(text) {
+  const lines = String(text || "").split(/\n/);
+  const html = [];
+  let paragraph = [];
+  let listItems = [];
+  let inCode = false;
+  let codeLines = [];
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p>${paragraph.map(renderInlineMarkdown).join("<br>")}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!listItems.length) return;
+    html.push(`<ul>${listItems.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`);
+    listItems = [];
+  };
+  lines.forEach(line => {
+    if (line.trim().startsWith("```")) {
+      if (inCode) {
+        html.push(`<pre>${escape(codeLines.join("\n"))}</pre>`);
+        codeLines = [];
+        inCode = false;
+      } else {
+        flushParagraph();
+        flushList();
+        inCode = true;
+      }
+      return;
+    }
+    if (inCode) {
+      codeLines.push(line);
+      return;
+    }
+    const trimmed = line.trim();
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+    const quote = trimmed.match(/^>\s?(.+)$/);
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+    if (heading) {
+      flushParagraph();
+      flushList();
+      html.push(`<h${heading[1].length}>${renderInlineMarkdown(heading[2])}</h${heading[1].length}>`);
+      return;
+    }
+    if (bullet) {
+      flushParagraph();
+      listItems.push(bullet[1]);
+      return;
+    }
+    if (quote) {
+      flushParagraph();
+      flushList();
+      html.push(`<blockquote>${renderInlineMarkdown(quote[1])}</blockquote>`);
+      return;
+    }
+    flushList();
+    paragraph.push(trimmed);
+  });
+  if (inCode) html.push(`<pre>${escape(codeLines.join("\n"))}</pre>`);
+  flushParagraph();
+  flushList();
+  return html.join("") || "<p>这份 Markdown 没有可显示内容。</p>";
+}
+
+function renderPdfSource(path, source) {
+  const viewer = document.getElementById("viewer");
+  viewer.classList.add("generic-viewer");
+  viewer.innerHTML = `<iframe class="embedded-doc" src="${escapeAttr(path)}" title="${escapeAttr(source.title || "PDF")}"></iframe>`;
+  tocListEl.innerHTML = '<div class="toc-empty">PDF 第一版使用浏览器预览。若要做精准划线，后面需要接 PDF.js 文本层。</div>';
+}
+
+function renderUnsupportedSource(source) {
+  const viewer = document.getElementById("viewer");
+  viewer.classList.add("generic-viewer");
+  viewer.innerHTML = `
+    <div class="unsupported-doc">
+      <h2>${escape((source.type || "文件").toUpperCase())} 需要先转换</h2>
+      <p>这类文件浏览器不能稳定直接解析文本层。第一版先把它纳入共读入口，但需要先转成 PDF、HTML 或 Markdown 后再进行划线和标签。</p>
+      <p>建议：PPT 转 PDF，Word 转 Markdown 或 HTML。之后我可以把转换按钮接到本地桥服务里。</p>
+      <p>当前文件：${escape(source.fileName || source.title || source.path || "未命名文件")}</p>
+    </div>
+  `;
+  tocListEl.innerHTML = '<div class="toc-empty">转换为 PDF/HTML/MD 后会显示目录或标题导航。</div>';
+}
+
+function renderGenericToc() {
+  const doc = document.getElementById("docContent");
+  if (!tocListEl || !doc) return;
+  const headings = [...doc.querySelectorAll("h1, h2, h3")].slice(0, 80);
+  if (!headings.length) {
+    tocListEl.innerHTML = '<div class="toc-empty">这份内容没有标题目录。可以直接阅读并划线。</div>';
+    return;
+  }
+  tocListEl.innerHTML = "";
+  headings.forEach((heading, index) => {
+    heading.id = heading.id || `doc-heading-${index}`;
+    const btn = document.createElement("button");
+    btn.className = "toc-item";
+    btn.type = "button";
+    btn.style.paddingLeft = `${8 + (Number(heading.tagName.slice(1)) - 1) * 12}px`;
+    btn.textContent = heading.textContent.trim() || "未命名标题";
+    btn.addEventListener("click", () => heading.scrollIntoView({ block: "start", behavior: "smooth" }));
+    tocListEl.appendChild(btn);
+  });
+}
+
+function setupGenericSelection() {
+  const doc = document.getElementById("docContent");
+  if (!doc) return;
+  doc.addEventListener("mouseup", handleGenericSelection);
+  doc.addEventListener("touchend", () => setTimeout(handleGenericSelection, 0));
+}
+
+function handleGenericSelection() {
+  const doc = document.getElementById("docContent");
+  const sel = window.getSelection();
+  if (!doc || !sel || !sel.rangeCount || !sel.toString().trim() || !doc.contains(sel.anchorNode)) {
+    bubble.classList.remove("show");
+    pendingSelection = null;
+    return;
+  }
+  const range = sel.getRangeAt(0);
+  pendingSelection = { selection: sel, range: range.cloneRange(), contents: null, cfiRange: "", sourceType: "generic" };
+  const rect = range.getBoundingClientRect();
+  bubble.style.top = (window.scrollY + rect.bottom + 8) + "px";
+  bubble.style.left = (window.scrollX + rect.left + rect.width / 2) + "px";
+  bubble.classList.add("show");
+}
+
+function applyGenericHighlight(selectionInfo, tag = "划线") {
+  if (!selectionInfo || !selectionInfo.range) return;
+  const span = document.createElement("span");
+  span.className = `doc-highlight ${highlightStyleForTag(tag).className}`;
+  span.dataset.tag = tag;
+  try {
+    selectionInfo.range.surroundContents(span);
+  } catch (e) {
+    try {
+      const contents = selectionInfo.range.extractContents();
+      span.appendChild(contents);
+      selectionInfo.range.insertNode(span);
+    } catch (err) {}
+  }
+  window.getSelection().removeAllRanges();
+}
+
+function escapeAttr(s) {
+  return String(s || "").replace(/[<>&"]/g, c => ({ "<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;" }[c]));
+}
+
+function updateChapterLabel() {
+  if (!book.navigation) return;
+  const nav = book.navigation.toc || [];
+  chapterEl.textContent = nav.length ? nav[0].label : "序言";
+}
+
+function renderToc() {
+  if (!tocListEl || !book.navigation) return;
+  const toc = book.navigation.toc || [];
+  if (!toc.length) {
+    tocListEl.innerHTML = '<div class="toc-empty">这本书没有提供目录。</div>';
+    return;
+  }
+  tocListEl.innerHTML = "";
+  const addItem = (item, depth = 0) => {
+    const btn = document.createElement("button");
+    btn.className = "toc-item";
+    btn.type = "button";
+    btn.dataset.href = item.href;
+    btn.style.paddingLeft = `${8 + depth * 14}px`;
+    btn.textContent = item.label ? item.label.trim() : "未命名章节";
+    btn.addEventListener("click", () => {
+      if (!rendition) return;
+      rendition.display(item.href);
+    });
+    tocListEl.appendChild(btn);
+    (item.subitems || []).forEach(child => addItem(child, depth + 1));
+  };
+  toc.forEach(item => addItem(item));
+}
+
+function updateActiveToc(href) {
+  if (!tocListEl || !href) return;
+  let matched = null;
+  tocListEl.querySelectorAll(".toc-item").forEach(btn => {
+    btn.classList.remove("active");
+    const itemHref = btn.dataset.href || "";
+    if (href === itemHref || href.split("#")[0] === itemHref.split("#")[0]) {
+      matched = btn;
+    }
+  });
+  if (matched) matched.classList.add("active");
+}
+
+function updateProgress() {
+  if (!book) {
+    progFill.style.width = "100%";
+    progText.textContent = "文档";
+    const compPct = document.getElementById("companionProgress");
+    if (compPct) compPct.textContent = `${(currentSource.type || "内容").toUpperCase()} · 可共读`;
+    return;
+  }
+  if (!book.locations || !book.locations.length()) return;
+  if (!currentHref) {
+    progFill.style.width = "0%";
+    progText.textContent = "0%";
+    const compPct = document.getElementById("companionProgress");
+    if (compPct) compPct.textContent = "阅读进度 0%";
+    return;
+  }
+  let pct = 0;
+  try {
+    pct = Math.floor(book.locations.percentageFromCfi(currentHref) * 100);
+  } catch (e) {
+    progFill.style.width = "0%";
+    progText.textContent = "定位中";
+    const compPct = document.getElementById("companionProgress");
+    if (compPct) compPct.textContent = "阅读进度定位中";
+    return;
+  }
+  progFill.style.width = pct + "%";
+  progText.textContent = pct + "%";
+  // 同步到搭子面板
+  const compPct = document.getElementById("companionProgress");
+  if (compPct) compPct.textContent = `阅读进度 ${pct}%`;
+}
+
+// ============ 翻页 ============
+let lastPageTurnAt = 0;
+function prev() {
+  if (rendition) {
+    rendition.prev();
+    return;
+  }
+  const viewer = document.getElementById("viewer");
+  if (viewer) viewer.scrollBy({ top: -Math.max(360, viewer.clientHeight * 0.82), behavior: "smooth" });
+}
+function next() {
+  if (rendition) {
+    rendition.next();
+    return;
+  }
+  const viewer = document.getElementById("viewer");
+  if (viewer) viewer.scrollBy({ top: Math.max(360, viewer.clientHeight * 0.82), behavior: "smooth" });
+}
+
+function turnPage(direction) {
+  const now = Date.now();
+  if (now - lastPageTurnAt < 420) return;
+  lastPageTurnAt = now;
+  direction < 0 ? prev() : next();
+}
+
+function isTypingTarget(target) {
+  if (!target) return false;
+  const tag = target.tagName;
+  return target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+function handlePageKey(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+    if (!isTypingTarget(e.target)) {
+      e.preventDefault();
+      undoLastLine();
+    }
+    return;
+  }
+  if (isTypingTarget(e.target)) return;
+  if (e.key === "ArrowLeft" || e.key === "PageUp") {
+    e.preventDefault();
+    turnPage(-1);
+  }
+  if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") {
+    e.preventDefault();
+    turnPage(1);
+  }
+}
+
+function handlePageWheel(e) {
+  if (isTypingTarget(e.target)) return;
+  if (!rendition) return;
+  const reader = document.querySelector(".reader-column");
+  if (reader && !reader.contains(e.target) && e.currentTarget === document) return;
+  const delta = Math.abs(e.deltaY) >= Math.abs(e.deltaX) ? e.deltaY : e.deltaX;
+  if (Math.abs(delta) < 12) return;
+  e.preventDefault();
+  turnPage(delta > 0 ? 1 : -1);
+}
+
+document.addEventListener("keydown", handlePageKey);
+document.addEventListener("wheel", handlePageWheel, { passive: false });
+window.addEventListener("resize", () => {
+  safeResizeRendition();
+});
+
+// ============ 划线 ============
+function registerReaderHooks() {
+  if (!rendition || readerHooksRegistered) return;
+  readerHooksRegistered = true;
+
+  rendition.hooks.content.register((contents) => {
+    try {
+      const iframe = contents.document.defaultView && contents.document.defaultView.frameElement;
+      if (iframe) iframe.removeAttribute("sandbox");
+    } catch (e) { /* ignore */ }
+
+    const win = contents.window;
+    fitReaderMedia(contents);
+    win.addEventListener("keydown", handlePageKey);
+    win.addEventListener("wheel", handlePageWheel, { passive: false });
+    win.addEventListener("mouseup", () => handleSelection(contents));
+    win.addEventListener("touchend", () => setTimeout(() => handleSelection(contents), 0));
+    win.addEventListener("dblclick", () => highlightSelection(contents));
+  });
+}
+
+function fitReaderMedia(contents) {
+  const doc = contents.document;
+  if (!doc || doc.getElementById("co-read-fit-media")) return;
+  const style = doc.createElement("style");
+  style.id = "co-read-fit-media";
+  style.textContent = `
+    html, body {
+      min-height: 100%;
+    }
+    img, svg, image {
+      max-width: 100% !important;
+      max-height: calc(100vh - 16px) !important;
+      object-fit: contain !important;
+    }
+    body {
+      overflow: hidden;
+    }
+    .epubjs-hl,
+    .co-read-highlight {
+      opacity: 0.34 !important;
+      pointer-events: none !important;
+    }
+    .co-read-highlight.hl-case { fill: #ee9a49 !important; fill-opacity: 0.26 !important; }
+    .co-read-highlight.hl-quote { fill: #f6d96b !important; fill-opacity: 0.30 !important; }
+    .co-read-highlight.hl-question { fill: #70a6e0 !important; fill-opacity: 0.24 !important; }
+    .co-read-highlight.hl-resonate { fill: #e089a9 !important; fill-opacity: 0.24 !important; }
+    .co-read-highlight.hl-disagree { fill: #da675e !important; fill-opacity: 0.25 !important; }
+    .co-read-highlight.hl-action { fill: #68aa77 !important; fill-opacity: 0.25 !important; }
+    .co-read-highlight.hl-insight { fill: #9d84d6 !important; fill-opacity: 0.25 !important; }
+    svg .epubjs-hl,
+    svg .co-read-highlight {
+      fill-opacity: 0.22 !important;
+    }
+  `;
+  (doc.head || doc.documentElement).appendChild(style);
+}
+
+function handleSelection(contents) {
+  const sel = getReaderSelection(contents);
+  if (!sel || !sel.toString().trim()) {
+    bubble.classList.remove("show");
+    pendingSelection = null;
+    return;
+  }
+  const range = sel.getRangeAt(0);
+  const cfiRange = getSelectionCfi(contents, range);
+  pendingSelection = { selection: sel, contents, cfiRange };
+  const rect = range.getBoundingClientRect();
+  const iframe = contents.document.defaultView && contents.document.defaultView.frameElement;
+  const iframeRect = iframe ? iframe.getBoundingClientRect() : { top: 0, left: 0 };
+  bubble.style.top  = (window.scrollY + iframeRect.top + rect.bottom + 8) + "px";
+  bubble.style.left = (window.scrollX + iframeRect.left + rect.left + rect.width / 2) + "px";
+  bubble.classList.add("show");
+}
+
+bubble.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-tag]");
+  if (!btn) return;
+  saveLine(btn.dataset.tag);
+});
+
+function saveLine(tag = "划线") {
+  if (!pendingSelection) return;
+  const text = pendingSelection.selection.toString().trim();
+  if (!text) return;
+
+  const line = {
+    id: `line-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    ts: new Date().toISOString().replace("T", " ").slice(0, 16),
+    sourceTitle: currentSource.title || BOOK_META.title,
+    sourceType: currentSource.type || "epub",
+    chapter: currentChapter,
+    href: currentHref,
+    cfiRange: pendingSelection.cfiRange || "",
+    tag,
+    text: text.length > 200 ? text.slice(0, 200) + "…" : text,
+    full: text
+  };
+
+  savedLines.push(line);
+  lastLineAction = line;
+  persistLines();
+  if (pendingSelection.sourceType === "generic") {
+    applyGenericHighlight(pendingSelection, tag);
+  } else {
+    applyHighlight(line);
+  }
+  const syncedToMd = syncLineToBridge(line);
+
+  // 给用户一个小反馈，不弹通知
+  bubble.classList.remove("show");
+  pendingSelection = null;
+  showToast(syncedToMd ? `已记录为${tag}` : `已先记录为${tag}`);
+  renderDrawer();
+  updateLineSummary(line);
+  if (!document.body.classList.contains("immersive")) {
+    maybeSendLineToCompanion(line);
+  }
+}
+
+function maybeSendLineToCompanion(line) {
+  const prompt = buildLinePrompt(line);
+  if (!prompt) return;
+  pendingInsight = {
+    line,
+    prompt,
+    reply: "",
+    createdAt: new Date().toISOString()
+  };
+  hideInsightCandidate();
+  const sent = sendCompanionMessage(prompt, { clearInput: false });
+  showToast(sent ? `已带原句发给共读搭子：${line.tag}` : `已记录为${line.tag}，共读搭子连接后可再聊`);
+}
+
+function buildLinePrompt(line) {
+  const quote = line.full || line.text || "";
+  const title = line.sourceTitle || currentSource.title || "这份内容";
+  const chapter = line.chapter || currentChapter || "当前位置";
+  const header = (tag) => `我点了【${tag}】：\n\n「${quote}」\n\n来源：《${title}》${chapter ? `，${chapter}` : ""}。\n\n`;
+  const commonRule =
+    `请把它当作一次共读互动来回应，不要直接替我生成定稿卡片；如果要沉淀卡片，先追问或等待我补充自己的触发点、例子、反对意见或应用场景。`;
+  if (line.tag === "案例") {
+    return header("案例") +
+      `我觉得这句可能包含一个例子、场景或机制。请帮我判断：\n` +
+      `- 它在原文里服务于哪个观点？\n` +
+      `- 这个例子成立需要哪些条件？\n` +
+      `- 如果要沉淀成案例卡，还缺我补充什么现实例子或使用场景？\n\n` +
+      commonRule;
+  }
+  if (line.tag === "金句") {
+    return header("金句") +
+      `我觉得这句表达得很有力量。请不要只夸它“很有道理”，而是帮我拆：\n` +
+      `- 它压缩了什么判断或概念？\n` +
+      `- 哪个词最关键？\n` +
+      `- 它的适用边界在哪里？\n` +
+      `- 如果做成金句/概念卡，标题可以怎么取？\n\n` +
+      commonRule;
+  }
+  if (line.tag === "疑问") {
+    return header("疑问") +
+      `我对这句还没想明白。请帮我：\n` +
+      `- 先用原文语境解释它可能是什么意思。\n` +
+      `- 再列出 2 个可能的理解方向。\n` +
+      `- 最后问我一个具体问题，帮我判断我到底卡在哪里。\n\n` +
+      commonRule;
+  }
+  if (line.tag === "共鸣") {
+    return header("共鸣") +
+      `这句让我有反应。请先别急着总结道理，也不要推断我的个人背景。请帮我：\n` +
+      `- 说说它可能触发共鸣的几个原因。\n` +
+      `- 区分“书里说的观点”和“我可能产生的感受”。\n` +
+      `- 问我一个问题，让我把共鸣落到自己的例子里。\n\n` +
+      commonRule;
+  }
+  if (line.tag === "反对") {
+    return header("反对") +
+      `我对这句不太同意。请用对话方式帮我拆，不要急着站队：\n` +
+      `- 先替作者把这句话最强版本讲清楚。\n` +
+      `- 再列出它依赖的关键前提。\n` +
+      `- 给出可能的反例或失效条件。\n` +
+      `- 最后问我：我反对的是事实判断、价值判断，还是适用场景？\n\n` +
+      commonRule;
+  }
+  if (line.tag === "行动") {
+    return header("行动") +
+      `我觉得这句可能可以转成行动。请帮我：\n` +
+      `- 提炼这句背后的可执行原则。\n` +
+      `- 给 2 个很小、低成本、下次阅读或生活/工作中可试的动作。\n` +
+      `- 标明每个动作要观察什么结果。\n` +
+      `- 不要替我设定具体职业场景，除非我自己补充。\n\n` +
+      commonRule;
+  }
+  if (line.tag === "洞察") {
+    return header("洞察") +
+      `我觉得这句可能有洞察价值。请陪我往下挖：\n` +
+      `- 它背后的关键假设是什么？\n` +
+      `- 它和本章/本书的问题意识有什么关系？\n` +
+      `- 它更像概念卡、方法卡还是案例卡的种子？为什么？\n` +
+      `- 如果要成为一张真正有用的卡片，还需要我补充哪一种个人理解？\n\n` +
+      commonRule;
+  }
+  return "";
+}
+
+function showInsightCandidate() {
+  if (!pendingInsight || !insightBar) return;
+  insightText.textContent = `可沉淀：${pendingInsight.line.tag} · ${shortenQuote(pendingInsight.line.text)}`;
+  insightBar.hidden = false;
+}
+
+function hideInsightCandidate() {
+  if (insightBar) insightBar.hidden = true;
+}
+
+function saveInsightCandidate() {
+  if (!pendingInsight || !pendingInsight.reply || !ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "insight", insight: pendingInsight }));
+  pendingInsight = null;
+  hideInsightCandidate();
+}
+
+function syncLineToBridge(line) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+  ws.send(JSON.stringify({ type: "line", line }));
+  return true;
+}
+
+function syncLineDeleteToBridge(line) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+  ws.send(JSON.stringify({ type: "line_deleted", line }));
+  return true;
+}
+
+// 划线视觉高亮（同一本 EPUB 重新打开会重新加载，目前 session 内有效）
+function getReaderSelection(contents) {
+  if (contents && contents.window && contents.window.getSelection) {
+    return contents.window.getSelection();
+  }
+  return rendition && rendition.getSelection ? rendition.getSelection() : null;
+}
+
+function highlightSelection(contents) {
+  const sel = getReaderSelection(contents);
+  if (!sel || !sel.rangeCount || !sel.toString().trim()) return;
+  const range = sel.getRangeAt(0);
+  const span = contents.document.createElement("span");
+  span.style.background = "var(--highlight)";
+  try { range.surroundContents(span); } catch(e) {}
+}
+
+function getSelectionCfi(contents, range) {
+  try {
+    if (contents && typeof contents.cfiFromRange === "function") {
+      return contents.cfiFromRange(range);
+    }
+  } catch (e) { /* ignore */ }
+  return "";
+}
+
+function applyHighlight(line) {
+  if (!line || !line.cfiRange || !rendition || !rendition.annotations) return false;
+  const style = highlightStyleForTag(line.tag || "划线");
+  try {
+    rendition.annotations.highlight(
+      line.cfiRange,
+      { id: line.id, tag: line.tag },
+      () => removeLine(line.id),
+      `co-read-highlight ${style.className}`,
+      { fill: style.fill, "fill-opacity": style.opacity, "pointer-events": "none" }
+    );
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function removeHighlight(line) {
+  if (!line || !line.cfiRange || !rendition || !rendition.annotations) return;
+  try { rendition.annotations.remove(line.cfiRange, "highlight"); } catch (e) {}
+}
+
+function restoreHighlights() {
+  if (!rendition || !rendition.annotations) return;
+  savedLines.forEach(applyHighlight);
+}
+
+function removeLine(id) {
+  const line = savedLines.find(l => l.id === id);
+  if (!line) return;
+  removeHighlight(line);
+  savedLines = savedLines.filter(l => l.id !== id);
+  if (lastLineAction && lastLineAction.id === id) {
+    lastLineAction = null;
+  }
+  persistLines();
+  syncLineDeleteToBridge(line);
+  renderDrawer();
+  updateLineSummary(savedLines[savedLines.length - 1] || null);
+  showToast("已取消这条划线");
+}
+
+function undoLastLine() {
+  const target = lastLineAction || savedLines[savedLines.length - 1];
+  if (!target) {
+    showToast("没有可撤销的划线");
+    return;
+  }
+  removeLine(target.id);
+}
+
+function persistLines() {
+  localStorage.setItem("co_read_lines", JSON.stringify(savedLines));
+}
+
+function normalizeSavedLines(lines) {
+  return (Array.isArray(lines) ? lines : []).map((line, index) => ({
+    id: line.id || `old-line-${index}-${Date.now()}`,
+    tag: line.tag || "划线",
+    cfiRange: line.cfiRange || "",
+    ...line
+  }));
+}
+
+function updateLineSummary(latestLine) {
+  const lineCount = document.getElementById("lineCount");
+  if (lineCount) lineCount.textContent = savedLines.length;
+  const compCount = document.getElementById("companionLineCount");
+  if (compCount) compCount.textContent = savedLines.length;
+  const compHint = document.getElementById("companionLineHint");
+  if (!compHint) return;
+  if (latestLine) {
+    compHint.textContent = `最新 ${latestLine.tag}：${latestLine.text.slice(0, 30)}…`;
+    compHint.style.color = "var(--text)";
+  } else {
+    compHint.textContent = "划过线后这里会出现记录";
+    compHint.style.color = "var(--muted)";
+  }
+}
+
+// ============ 划线列表 ============
+function toggleDrawer() {
+  document.getElementById("drawer").classList.toggle("open");
+  renderDrawer();
+}
+
+function renderDrawer() {
+  const list = document.getElementById("lineList");
+  list.innerHTML = "";
+  savedLines.forEach((l, i) => {
+    const div = document.createElement("div");
+    div.className = "line-item";
+    div.innerHTML = `
+      <div class="line-top">
+        <div class="meta"><span class="line-tag">${escape(l.tag || "划线")}</span>${escape(l.sourceTitle || BOOK_META.title)} · ${l.ts} · ${escape(l.chapter || "正文")}</div>
+        <button class="line-remove" type="button" data-id="${escape(l.id)}">取消</button>
+      </div>
+      <div class="quote">「${escape(l.text)}」</div>
+    `;
+    list.appendChild(div);
+  });
+  list.querySelectorAll(".line-remove").forEach(btn => {
+    btn.addEventListener("click", () => removeLine(btn.dataset.id));
+  });
+  document.getElementById("drawerCount").textContent = savedLines.length ? `共 ${savedLines.length} 条` : "";
+}
+
+function escape(s) { return String(s || "").replace(/[<>&]/g, c => ({ "<":"&lt;",">":"&gt;","&":"&amp;" }[c])); }
+
+// ============ 导出到 lines.md ============
+// 你按下"导出"按钮时调用，把当前 session 的划线追加写入 .md 文件
+// 实际写入由我（共读搭子）通过 Read+Edit 工具完成；这里只提供预览
+
+function exportToMd() {
+  if (!savedLines.length) { showToast("还没有划线"); return; }
+  const today = new Date().toISOString().slice(0, 10);
+  let md = `\n## ${today} · ${BOOK_META.title} · 序言 / 第 X 章\n\n`;
+  savedLines.forEach(l => {
+    md += `**${l.ts.slice(11)}** · ${l.chapter} · ${l.tag || "划线"}\n`;
+    md += `> ${l.text}\n\n`;
+  });
+  // 触发下载（备用通道，万一你想直接看）
+  const blob = new Blob([md], { type: "text/markdown" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `划线_${today}.md`;
+  a.click();
+  showToast("已下载划线片段，发给共读搭子即可");
+}
+
+// ============ Toast ============
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+// ============ 聊天：WebSocket 客户端 ============
+const chatFab    = document.getElementById("chatFab");
+const chatPanel  = document.getElementById("chatPanel");
+const chatBody   = document.getElementById("chatBody");
+const chatInput  = document.getElementById("chatInput");
+const chatSend   = document.getElementById("chatSend");
+const chatStatus = document.getElementById("chatStatus");
+const chatThinking = document.getElementById("chatThinking");
+const chatBadge  = document.getElementById("chatBadge");
+const insightBar = document.getElementById("insightBar");
+const insightText = document.getElementById("insightText");
+const insightSave = document.getElementById("insightSave");
+var ws = null;
+let panelOpen = false;
+let unread = 0;
+let chatMessages = [];
+let chatVisibleCount = 10;
+let companionThinking = false;
+let pendingInsight = null;
+let activeChatSourceId = "";
+const CHAT_VISIBLE_INITIAL = 10;
+const CHAT_VISIBLE_STEP = 10;
+
+function connectWS() {
+  const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
+  const httpPort = Number(location.port || 8768);
+  const wsPort = Number.isFinite(httpPort) ? httpPort - 2 : 8766;
+  ws = new WebSocket(`${wsProtocol}//${location.hostname || "localhost"}:${wsPort}`);
+  ws.onopen = () => {
+    chatStatus.textContent = "已连接 · 共读搭子会回复";
+    setThinking(false);
+    sendSourceContext();
+    renderChatMessages({ forceBottom: true });
+    chatInput.disabled = false;
+    chatSend.disabled = false;
+  };
+  ws.onclose = () => {
+    chatStatus.textContent = "未连接 · 跑 venv/bin/python 共读搭子.py";
+    setThinking(false);
+    chatInput.disabled = true;
+    chatSend.disabled = true;
+    setTimeout(connectWS, 2000);
+  };
+  ws.onerror = () => { /* onclose 会处理 */ };
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === "history") {
+        if (msg.sourceId && msg.sourceId !== currentSource.id) return;
+        activeChatSourceId = msg.sourceId || currentSource.id;
+        renderHistory(msg.text);
+      } else if (msg.type === "reply") {
+        if (msg.sourceId && msg.sourceId !== currentSource.id) return;
+        renderReply(msg.text);
+      } else if (msg.type === "status") {
+        chatStatus.textContent = msg.text;
+        setThinking(msg.text.includes("正在"));
+      } else if (msg.type === "line_saved") {
+        showToast("已写入共读日志.md");
+      } else if (msg.type === "line_deleted") {
+        showToast(msg.deleted ? "已从共读日志.md 移除" : "本页已取消，日志里没找到对应块");
+      } else if (msg.type === "insight_saved") {
+        showToast(msg.saved ? "已存入沉淀卡片" : "洞察保存失败");
+      }
+    } catch (err) { console.error(err); }
+  };
+}
+
+function sendSourceContext() {
+  if (!ws || ws.readyState !== 1 || !currentSource) return;
+  ws.send(JSON.stringify({
+    type: "source",
+    source: {
+      id: currentSource.id,
+      type: currentSource.type,
+      title: currentSource.title,
+      path: currentSource.path,
+      chapter: currentSource.chapter
+    }
+  }));
+}
+
+function renderHistory(text) {
+  chatMessages = [];
+  chatVisibleCount = CHAT_VISIBLE_INITIAL;
+  const parts = text.split("---");
+  parts.forEach(p => {
+    p = p.trim();
+    if (!p) return;
+    if (p.includes("**用户**")) {
+      const body = parseSpeakerBlock(p, "用户");
+      if (body) chatMessages.push({ role: "reader", text: body });
+    } else if (p.includes("共读搭子") || p.includes("**共读搭子**")) {
+      const body = parseSpeakerBlock(p, "共读搭子");
+      if (body) chatMessages.push({ role: "companion", text: body });
+    }
+  });
+  if (!chatMessages.length) {
+    chatMessages.push({
+      role: "companion",
+      text: "我们还没有为这本书定阅读计划。你可以直接开始读，也可以先让我问 3 个轻量问题来定计划；如果你不想回答问题，我也可以先给一版通用计划。"
+    });
+  }
+  renderChatMessages({ forceBottom: true });
+}
+
+function renderReply(text) {
+  // 解析最新一段共读搭子的回复
+  setThinking(false);
+  const body = parseSpeakerBlock(text, "共读搭子") || cleanMessageBody(text);
+  if (body) {
+    if (pendingInsight && !pendingInsight.reply) {
+      pendingInsight.reply = body;
+      showInsightCandidate();
+    }
+    addChatMessage("companion", body, { forceBottom: true });
+  }
+}
+
+function parseSpeakerBlock(text, speaker) {
+  const escaped = speaker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const markdown = new RegExp("\\*\\*" + escaped + "\\*\\*[^\\n]*\\n\\n([\\s\\S]*)");
+  const plain = new RegExp(escaped + "[：:][^\\n]*\\n\\n?([\\s\\S]*)");
+  const m = text.match(markdown) || text.match(plain);
+  return m ? cleanMessageBody(m[1]) : "";
+}
+
+function cleanMessageBody(text) {
+  return text
+    .replace(/\n-{3,}\s*$/g, "")
+    .trim();
+}
+
+function appendMsg(role, text) {
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  const ts = new Date().toTimeString().slice(0, 5);
+  const displayText = formatMessageForDisplay(role, text);
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  const shouldCollapse = displayText.length > 360;
+  bubble.innerHTML = renderMarkdown(shouldCollapse ? displayText.slice(0, 260).trim() + "…" : displayText);
+  if (shouldCollapse) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "message-more";
+    more.textContent = "展开完整";
+    more.addEventListener("click", () => {
+      bubble.innerHTML = renderMarkdown(displayText);
+    });
+    bubble.appendChild(more);
+  }
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.textContent = `${role === "reader" ? "你" : "共读搭子"} · ${ts}`;
+  div.appendChild(bubble);
+  div.appendChild(meta);
+  chatBody.appendChild(div);
+}
+
+function formatMessageForDisplay(role, text) {
+  if (role !== "reader") return text;
+  const q = text.match(/^我点了【疑问】：\n\n「([\s\S]*?)」\n\n/);
+  if (q) return formatHighlightDisplay("疑问", q[1], [
+    "解释它在原文语境里的意思",
+    "给出 2 个可能理解方向",
+    "追问我具体卡在哪里"
+  ]);
+  const caseLine = text.match(/^我点了【案例】：\n\n「([\s\S]*?)」\n\n/);
+  if (caseLine) return formatHighlightDisplay("案例", caseLine[1], [
+    "判断它服务于哪个观点",
+    "拆出这个案例成立的条件",
+    "追问还缺哪个现实例子或使用场景"
+  ]);
+  const quoteLine = text.match(/^我点了【金句】：\n\n「([\s\S]*?)」\n\n/);
+  if (quoteLine) return formatHighlightDisplay("金句", quoteLine[1], [
+    "拆出它压缩了什么判断或概念",
+    "找出最关键的词",
+    "说明适用边界和可做成什么卡"
+  ]);
+  const empathy = text.match(/^我点了【共鸣】：\n\n「([\s\S]*?)」\n\n/);
+  if (empathy) return formatHighlightDisplay("共鸣", empathy[1], [
+    "不要推断我的个人背景",
+    "区分书里观点和我的可能感受",
+    "追问我自己的例子"
+  ]);
+  const disagree = text.match(/^我点了【反对】：\n\n「([\s\S]*?)」\n\n/);
+  if (disagree) return formatHighlightDisplay("反对", disagree[1], [
+    "先替作者把这句话最强版本讲清楚",
+    "列出它依赖的关键前提",
+    "给出可能的反例或失效条件",
+    "追问我反对的是事实、价值还是适用场景"
+  ]);
+  const action = text.match(/^我点了【行动】：\n\n「([\s\S]*?)」\n\n/);
+  if (action) return formatHighlightDisplay("行动", action[1], [
+    "提炼背后的可执行原则",
+    "给 2 个低成本小动作",
+    "说明每个动作要观察什么"
+  ]);
+  const insight = text.match(/^我点了【洞察】：\n\n「([\s\S]*?)」\n\n/);
+  if (insight) return formatHighlightDisplay("洞察", insight[1], [
+    "挖出背后的关键假设",
+    "连接本章或本书的问题意识",
+    "判断更像概念卡、方法卡还是案例卡",
+    "追问还需要我补充哪种个人理解"
+  ]);
+  return text;
+}
+
+function formatHighlightDisplay(tag, quote, tasks) {
+  return `${tag}\n「${shortenQuote(quote)}」\n\n发送给共读搭子的任务：\n` +
+    tasks.map(item => `- ${item}`).join("\n");
+}
+
+function shortenQuote(text) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  return clean.length > 86 ? clean.slice(0, 86) + "…" : clean;
+}
+
+function renderMarkdown(text) {
+  const lines = String(text || "").split(/\n/);
+  const html = [];
+  let paragraph = [];
+  let listItems = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    html.push(`<p>${paragraph.map(renderInlineMarkdown).join("<br>")}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!listItems.length) return;
+    html.push(`<ul>${listItems.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`);
+    listItems = [];
+  };
+
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+    if (bullet) {
+      flushParagraph();
+      listItems.push(bullet[1]);
+      return;
+    }
+    flushList();
+    paragraph.push(trimmed);
+  });
+  flushParagraph();
+  flushList();
+  return html.join("");
+}
+
+function renderInlineMarkdown(text) {
+  return escape(text)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+}
+
+function addChatMessage(role, text, options = {}) {
+  chatMessages.push({ role, text });
+  renderChatMessages(options);
+}
+
+function setThinking(isThinking) {
+  companionThinking = Boolean(isThinking);
+  if (!chatThinking) return;
+  chatThinking.hidden = !companionThinking;
+}
+
+function renderChatMessages(options = {}) {
+  const shouldStickToBottom = options.stickToBottom !== false
+    && (chatBody.scrollHeight - chatBody.scrollTop - chatBody.clientHeight < 96);
+  const previousScrollTop = chatBody.scrollTop;
+  chatBody.innerHTML = "";
+  const hiddenCount = Math.max(0, chatMessages.length - chatVisibleCount);
+  if (hiddenCount > 0) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "history-more";
+    more.textContent = `显示更早 ${hiddenCount} 条`;
+    more.addEventListener("click", () => {
+      chatVisibleCount += CHAT_VISIBLE_STEP;
+      renderChatMessages({ stickToBottom: false });
+    });
+    chatBody.appendChild(more);
+  }
+  chatMessages.slice(-chatVisibleCount).forEach(msg => appendMsg(msg.role, msg.text));
+  const maxScroll = Math.max(0, chatBody.scrollHeight - chatBody.clientHeight);
+  if (options.anchor === "latest-start") {
+    const lastMsg = chatBody.querySelector(".msg:last-of-type");
+    if (lastMsg) {
+      chatBody.scrollTop = Math.min(maxScroll, Math.max(0, lastMsg.offsetTop - chatBody.offsetTop - 8));
+      return;
+    }
+  }
+  if (maxScroll <= 0) {
+    chatBody.scrollTop = 0;
+    return;
+  }
+  if (shouldStickToBottom || options.forceBottom) {
+    chatBody.scrollTop = maxScroll;
+  } else {
+    chatBody.scrollTop = Math.min(previousScrollTop, maxScroll);
+  }
+}
+
+// 启动探针
+console.log("[共读] ✅ 事件已绑定（共 " + document.querySelectorAll("button").length + " 个按钮）");
+if (!isFileMode) {
+  if (chatStatus) chatStatus.textContent = "已加载 · 准备连接…";
+  connectWS();
+}
+
+function sendCompanionMessage(text, options = {}) {
+  const cleanText = String(text || "").trim();
+  if (!cleanText || !ws || ws.readyState !== 1) return false;
+  ws.send(JSON.stringify({ type: "user", text: cleanText }));
+  addChatMessage("reader", cleanText, { forceBottom: true });
+  if (options.clearInput) chatInput.value = "";
+  setThinking(true);
+  chatStatus.textContent = "正在调用 模型 CLI…";
+  showToast("共读搭子读到了…");
+  return true;
+}
+
+function sendMessage() {
+  const text = chatInput.value.trim();
+  if (!text || !ws || ws.readyState !== 1) return;
+  sendCompanionMessage(text, { clearInput: true });
+  resizeChatInput();
+}
+
+chatSend.addEventListener("click", sendMessage);
+insightSave.addEventListener("click", saveInsightCandidate);
+chatInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+chatInput.addEventListener("input", resizeChatInput);
+
+function resizeChatInput() {
+  chatInput.style.height = "auto";
+  chatInput.style.height = Math.min(chatInput.scrollHeight, 160) + "px";
+}
+
+// ============ 沉浸阅读 + 内置白噪音 ============
+const noiseSelect = document.getElementById("noiseSelect");
+const noiseVolume = document.getElementById("noiseVolume");
+const noiseToggle = document.getElementById("noiseToggle");
+let immersiveMode = false;
+let audioCtx = null;
+let noiseNode = null;
+let noiseGain = null;
+let noisePlaying = false;
+let noiseMode = "off";
+
+function enterImmersive() {
+  immersiveMode = true;
+  document.body.classList.add("immersive");
+  if (document.documentElement.requestFullscreen) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+  updateSelectionBubbleMode();
+  safeResizeRendition();
+  showToast("已进入沉浸阅读");
+}
+
+function exitImmersive() {
+  immersiveMode = false;
+  document.body.classList.remove("immersive");
+  if (document.fullscreenElement && document.exitFullscreen) {
+    document.exitFullscreen().catch(() => {});
+  }
+  stopNoise();
+  updateSelectionBubbleMode();
+  safeResizeRendition();
+  showToast("已退出沉浸阅读");
+}
+
+document.addEventListener("fullscreenchange", () => {
+  if (!document.fullscreenElement && immersiveMode) {
+    immersiveMode = false;
+    document.body.classList.remove("immersive");
+    stopNoise();
+    updateSelectionBubbleMode();
+    safeResizeRendition();
+  }
+});
+
+function updateSelectionBubbleMode() {
+  const buttons = [...bubble.querySelectorAll("button[data-tag]")];
+  const labels = ["案例", "金句", "疑问", "共鸣", "反对", "行动", "洞察"];
+  buttons.forEach((btn, i) => {
+    btn.style.display = "";
+    if (labels[i]) {
+      btn.dataset.tag = labels[i];
+      btn.textContent = labels[i];
+    }
+  });
+  if (immersiveMode) {
+    showToast("沉浸模式：标签照常保存，不唤醒共读搭子");
+  }
+}
+
+function ensureAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    noiseGain = audioCtx.createGain();
+    noiseGain.gain.value = Number(noiseVolume.value || 0.18);
+    noiseGain.connect(audioCtx.destination);
+  }
+  return audioCtx;
+}
+
+function createNoiseProcessor(mode) {
+  const ctx = ensureAudio();
+  const node = ctx.createScriptProcessor(2048, 1, 1);
+  let pink = Array(7).fill(0);
+  let brown = 0;
+  let tick = 0;
+  node.onaudioprocess = (event) => {
+    const out = event.outputBuffer.getChannelData(0);
+    for (let i = 0; i < out.length; i++) {
+      const white = Math.random() * 2 - 1;
+      let sample = white;
+      if (mode === "pink" || mode === "rain") {
+        pink[0] = 0.99886 * pink[0] + white * 0.0555179;
+        pink[1] = 0.99332 * pink[1] + white * 0.0750759;
+        pink[2] = 0.96900 * pink[2] + white * 0.1538520;
+        pink[3] = 0.86650 * pink[3] + white * 0.3104856;
+        pink[4] = 0.55000 * pink[4] + white * 0.5329522;
+        pink[5] = -0.7616 * pink[5] - white * 0.0168980;
+        sample = (pink[0] + pink[1] + pink[2] + pink[3] + pink[4] + pink[5] + pink[6] + white * 0.5362) * 0.11;
+        pink[6] = white * 0.115926;
+      } else if (mode === "brown" || mode === "fire") {
+        brown = (brown + 0.02 * white) / 1.02;
+        sample = brown * 3.5;
+      }
+      if (mode === "rain") {
+        sample = sample * 0.7 + (Math.random() > 0.985 ? Math.random() * 0.8 : 0);
+      } else if (mode === "fire") {
+        sample = sample * 0.55 + (Math.random() > 0.992 ? (Math.random() * 2 - 1) * 0.9 : 0);
+      } else if (mode === "cafe") {
+        tick += 1;
+        const murmur = Math.sin(tick / 180) * 0.08 + Math.sin(tick / 317) * 0.05;
+        const clink = Math.random() > 0.997 ? (Math.random() * 2 - 1) * 0.6 : 0;
+        sample = white * 0.18 + murmur + clink;
+      }
+      out[i] = Math.max(-1, Math.min(1, sample));
+    }
+  };
+  return node;
+}
+
+function playNoise(mode = noiseSelect.value) {
+  noiseMode = mode;
+  if (noiseMode === "off") {
+    stopNoise();
+    return;
+  }
+  const ctx = ensureAudio();
+  if (ctx.state === "suspended") ctx.resume();
+  if (noiseNode) noiseNode.disconnect();
+  noiseNode = createNoiseProcessor(noiseMode);
+  noiseNode.connect(noiseGain);
+  noisePlaying = true;
+  noiseToggle.textContent = "暂停";
+}
+
+function stopNoise() {
+  if (noiseNode) {
+    noiseNode.disconnect();
+    noiseNode = null;
+  }
+  noisePlaying = false;
+  if (noiseToggle) noiseToggle.textContent = "播放";
+}
+
+noiseToggle.addEventListener("click", () => {
+  if (noisePlaying) stopNoise();
+  else playNoise(noiseSelect.value);
+});
+noiseSelect.addEventListener("change", () => {
+  if (noisePlaying) playNoise(noiseSelect.value);
+});
+noiseVolume.addEventListener("input", () => {
+  if (noiseGain) noiseGain.gain.value = Number(noiseVolume.value || 0.18);
+});
+
+renderDrawer();
+updateLineSummary(savedLines[savedLines.length - 1] || null);
+</script>
+</body>
+</html>
