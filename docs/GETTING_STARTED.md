@@ -51,7 +51,7 @@ questions, and card suggestions to your reading habits.
 python3 /tmp/reading-companion-demo/启动共读.py
 ```
 
-Open:
+Then open the page served by the launcher:
 
 ```text
 http://127.0.0.1:8768/共读.html

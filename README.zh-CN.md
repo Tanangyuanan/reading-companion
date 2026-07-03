@@ -4,11 +4,16 @@
 
 它会把一个本地文件夹变成共读工作区：浏览器阅读页、实时聊天桥、划线日志、阅读画像文件和卡片模板都在本机运行。适合想和 AI 一起读书，但不想把私人书籍、阅读记录、对话历史上传到云端的人。
 
+![reading-companion 共读界面](assets/screenshots/co-reading-ui.jpg)
+
+这个界面围绕“正在读书的现场”组织：左侧是目录和阅读计划，中间是书页，右侧是共读对话。你划中一句话，可以把它标成案例、金句、疑问、共鸣、反对、行动或洞察；这些互动会继续沉淀成卡片和个性化阅读记忆。
+
 它不只是一次性的阅读页面，也包含一套本地个性化记忆。每个 reading workspace 都会保存有证据的阅读偏好、反复出现的问题、你更喜欢的卡片方式，以及你对 agent 判断的纠正。下一次读书时，agent 可以把这些画像作为默认上下文，更懂你的阅读习惯；但你当下说的阅读目标永远优先于旧记录。
 
 ## 能做什么
 
-- 在本地打开共读页面：`http://127.0.0.1:8768/共读.html`
+- 创建本地 reading workspace，并通过 Python 启动共读桥
+- 启动器运行后，在本机浏览器里打开共读页面
 - 支持本地 EPUB/PDF/HTML/Markdown/文本，也支持没有原文的摘录式共读
 - 记录划线、碎念、对话、卡片候选
 - 从真实互动里形成本地阅读画像，而不是只做通用摘要
@@ -32,14 +37,21 @@
 
 ```bash
 python3 scripts/init_reading_workspace.py /tmp/reading-companion-demo --book "Demo Book" --source-mode user-input-driven
+```
+
+启动本地 Python 服务：
+
+```bash
 python3 /tmp/reading-companion-demo/启动共读.py
 ```
 
-打开：
+然后打开启动器提供的本地页面：
 
 ```text
 http://127.0.0.1:8768/共读.html
 ```
+
+这个 URL 只有在 `启动共读.py` 正在运行时才可用。启动器会启动本地 HTTP 页面和实时桥，并把最终端口写到 workspace 里的 `启动信息.md`。
 
 如果本机能找到 `claude`、`codex` 或 `gemini`，启动器会自动接入模型回复；如果找不到，页面仍然可以阅读、划线和保存日志。
 

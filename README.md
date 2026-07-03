@@ -7,6 +7,14 @@ browser reader, a realtime chat bridge, highlight logs, reading profile files,
 and card templates. It is designed for people who want to read with an AI
 companion without uploading private books or reading history to a hosted app.
 
+![reading-companion co-reading interface](assets/screenshots/co-reading-ui.jpg)
+
+The interface is organized around the reading moment: the left side keeps the
+table of contents and reading plan, the center stays focused on the book, and
+the right side holds the companion conversation. Highlight a passage and turn it
+into a case, quote, question, resonance, disagreement, action, or observation;
+those interactions become the raw material for cards and personalization memory.
+
 The companion is meant to get more useful over time. Each workspace contains a
 small, local personalization memory: it records evidence-backed reading
 preferences, recurring questions, useful card styles, and corrections from real
@@ -20,7 +28,8 @@ or another agent CLI through a thin adapter.
 
 ## What It Does
 
-- Opens a local co-reading page at `http://127.0.0.1:8768/共读.html`
+- Creates a local reading workspace, then starts a Python co-reading bridge
+- Serves the browser page locally after the launcher is running
 - Supports local EPUB/PDF/HTML/Markdown/text sources or excerpt-only reading
 - Captures highlights, reactions, conversations, and card candidates
 - Builds a local reading profile from interaction signals, not from generic summaries
@@ -55,14 +64,23 @@ Create a blank reading workspace:
 
 ```bash
 python3 scripts/init_reading_workspace.py /tmp/reading-companion-demo --book "Demo Book" --source-mode user-input-driven
+```
+
+Start the local Python launcher:
+
+```bash
 python3 /tmp/reading-companion-demo/启动共读.py
 ```
 
-Open:
+Then open the local page served by that launcher:
 
 ```text
 http://127.0.0.1:8768/共读.html
 ```
+
+The URL works only while `启动共读.py` is running. The launcher starts the local
+HTTP page and realtime bridge, writes the selected ports to `启动信息.md`, and
+keeps runtime state inside the reading workspace.
 
 If `claude`, `codex`, or `gemini` is available on your `PATH`, the launcher will
 auto-enable live model replies. If none is found, the page still works for
@@ -92,6 +110,7 @@ reading-companion/
 ├── assets/
 │   ├── coread/
 │   ├── frontend/
+│   ├── screenshots/
 │   └── *-template.md
 ├── docs/
 ├── references/
@@ -103,6 +122,7 @@ Important files:
 - `SKILL.md` - skill entrypoint and operating contract
 - `assets/frontend/` - browser reading pages
 - `assets/coread/` - local Python bridge and launcher
+- `assets/screenshots/` - README product screenshots
 - `scripts/init_reading_workspace.py` - creates a new reading workspace
 - `references/` - workflow, schemas, prompts, and compatibility notes
 - `docs/` - user-facing setup, config, privacy, and development docs
