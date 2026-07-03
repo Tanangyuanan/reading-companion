@@ -50,7 +50,7 @@ COREAD_MODEL_ENABLED=0 python3 /tmp/reading-companion-demo/启动共读.py
 
 ```bash
 find . -type d \( -name tmp -o -name .harness -o -name .venv -o -name venv -o -name __pycache__ \) -print
-rg -n "Anna|小满|/Users/|Agent工作间|API_KEY|SECRET|TOKEN|sk-[A-Za-z0-9]" . --glob '!references/cli-compatibility.md'
+rg -n "<个人姓名>|<私人助手名>|<本机绝对路径>|<凭证变量>|<密钥前缀>" . --glob '!references/cli-compatibility.md'
 ```
 
 ## 文档

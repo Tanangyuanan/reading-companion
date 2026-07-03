@@ -25,7 +25,7 @@ Use this checklist before sharing or publishing `reading-companion`.
 
 ```bash
 find . -type d \( -name tmp -o -name .harness -o -name .venv -o -name venv -o -name __pycache__ \) -print
-rg -n "Anna|小满|/Users/|Agent工作间|API_KEY|SECRET|TOKEN|sk-[A-Za-z0-9]" . --glob '!references/cli-compatibility.md'
+rg -n "<personal-name>|<private-assistant-name>|<absolute-home-path>|<credential-var>|<secret-prefix>" . --glob '!references/cli-compatibility.md'
 python3 scripts/init_reading_workspace.py /tmp/reading-companion-smoke --book "Demo Book" --source-mode user-input-driven
 python3 /tmp/reading-companion-smoke/启动共读.py
 ```

@@ -102,7 +102,7 @@ checks before publishing.
 
 ```bash
 find . -type d \( -name tmp -o -name .harness -o -name .venv -o -name venv -o -name __pycache__ \) -print
-rg -n "Anna|小满|/Users/|Agent工作间|API_KEY|SECRET|TOKEN|sk-[A-Za-z0-9]" . --glob '!references/cli-compatibility.md'
+rg -n "<personal-name>|<private-assistant-name>|<absolute-home-path>|<credential-var>|<secret-prefix>" . --glob '!references/cli-compatibility.md'
 ```
 
 Both commands should return no publish-blocking results.
