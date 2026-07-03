@@ -19,6 +19,18 @@ https://github.com/Tanangyuanan/reading-companion
 
 如果你的 agent 不能自动安装 skill，就先 clone 这个仓库，把 `reading-companion` 文件夹放到你的 agent runtime 会加载 skills 的目录里，然后再发送上面这段话。
 
+## 项目介绍
+
+`reading-companion` 是一个开源的 agent skill，用来把你的 agent 变成本地共读搭子。它不是把书上传到某个云端阅读产品，而是给 agent 一套可复用的工作流：准备 reading workspace、启动浏览器阅读器、在本机可用时接入模型 CLI、记录划线和对话，并长期维护一份轻量的阅读画像。
+
+这个项目由三层组成：
+
+- **Skill 指令层**：`SKILL.md` 和 `references/` 告诉 agent 怎么启动共读、什么时候询问书名或文件路径、如何使用阅读记忆，以及如何避免把用户私有状态写进 skill 包。
+- **本地阅读运行时**：`assets/coread/`、`assets/frontend/` 和 `scripts/init_reading_workspace.py` 负责创建本地阅读器、实时桥、dashboard、日志、卡片和 profile 文件。
+- **用户自己的 workspace**：真实书籍、划线、对话记录、卡片草稿和阅读画像信号，都保存在用户机器上的独立 reading workspace 里。
+
+所以它的目标不是做一次性的 AI 总结，而是做一个会随着共读互动变得更懂你的本地阅读搭子。它会从划线、提问、纠正、卡片选择里积累信号，下次继续读时，把这些本地 profile 当作上下文使用。
+
 ![reading-companion 共读界面](assets/screenshots/co-reading-ui.jpg)
 
 这个界面围绕“正在读书的现场”组织：左侧是目录和阅读计划，中间是书页，右侧是共读对话。你划中一句话，可以把它标成案例、金句、疑问、共鸣、反对、行动或洞察；这些互动会继续沉淀成卡片和个性化阅读记忆。

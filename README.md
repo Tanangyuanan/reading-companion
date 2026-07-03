@@ -25,6 +25,31 @@ If your agent cannot install skills automatically, clone this repository and put
 the `reading-companion` folder in the directory where your agent runtime loads
 skills, then send the same prompt again.
 
+## Project Overview
+
+`reading-companion` is an open-source agent skill for building a local co-reading
+companion. Instead of sending a book into a hosted reading app, it gives your
+agent a reusable workflow: prepare a reading workspace, launch a browser-based
+reader, connect a local model CLI when available, capture highlights and
+conversation, and maintain a lightweight reading profile over time.
+
+The project has three parts:
+
+- **Skill instructions**: `SKILL.md` and `references/` tell an agent how to run a
+  co-reading session, when to ask the user for a book, how to use profile memory,
+  and how to avoid saving private state in the skill package.
+- **Local reading runtime**: `assets/coread/`, `assets/frontend/`, and
+  `scripts/init_reading_workspace.py` create the actual local reader, realtime
+  bridge, dashboard, logs, cards, and profile files.
+- **User-owned workspace**: every book, highlight, conversation log, card draft,
+  and profile signal lives in a separate reading workspace created on the user's
+  machine.
+
+The result is a reading companion that can become more personal without becoming
+a cloud service. It learns from interaction signals such as highlights,
+questions, corrections, and card choices, then uses that local profile as context
+for future sessions.
+
 ![reading-companion co-reading interface](assets/screenshots/co-reading-ui.jpg)
 
 The interface is organized around the reading moment: the left side keeps the
